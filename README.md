@@ -88,13 +88,13 @@ Key design decisions at a glance:
 
 ## Status
 
-> ⚠️ This library is under active development. APIs are not yet stable.
+>  This library is under active development. APIs are not yet stable.
 
 | Milestone | Status | Target |
 |-----------|--------|--------|
-| M1: Async coordination engine | 🔄 In progress | Week 4 |
-| M2: Channel funding integration | 📋 Planned | Week 8 |
-| M3: CLI + crates.io release | 📋 Planned | Week 12 |
+| M1: Async coordination engine |  In progress | Week 4 |
+| M2: Channel funding integration |  Planned | Week 8 |
+| M3: CLI + crates.io release |  Planned | Week 12 |
 
 See [ROADMAP.md](./docs/ROADMAP.md) for detailed milestone breakdown.
 
@@ -237,4 +237,3 @@ You may obtain a copy of the License at
 
 - **Telegram:** [@charlesCode](https://t.me/charlesCode)
 - **Email:** contact@ilelab.org
-- **GitHub:** [github.com/ILE-Labs](https://github.com/ILE-Labs)

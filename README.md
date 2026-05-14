@@ -162,6 +162,7 @@ lightning-payjoin-kit open-channel --amount 1000000 --peer <node_pubkey>
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Full technical architecture, protocol design, and security model |
+| [RESEARCH.md](./docs/RESEARCH.md) | Research process, alternative evaluation, and rationale |
 | [ROADMAP.md](./docs/ROADMAP.md) | Detailed milestones, KPIs, and delivery timeline |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute to the project |
 | [SECURITY.md](./SECURITY.md) | Responsible disclosure policy |

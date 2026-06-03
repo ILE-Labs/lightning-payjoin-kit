@@ -114,7 +114,10 @@ impl LdkFundingSession {
         self.manual.as_ref()
     }
 
-    pub fn attach_reference(&mut self, reference: LdkFundingReference) -> Result<&LdkManualFunding> {
+    pub fn attach_reference(
+        &mut self,
+        reference: LdkFundingReference,
+    ) -> Result<&LdkManualFunding> {
         let manual = LdkManualFunding::new(&self.generation, &reference)?;
         self.reference = Some(reference);
         self.manual = Some(manual);
@@ -145,17 +148,19 @@ impl LdkFundingSession {
         };
         self.ensure_broadcast_safe_matches_session(&broadcast_safe)?;
 
-        let reference = self
-            .reference
-            .clone()
-            .ok_or_else(|| Error::InvalidProposal("funding reference is not attached".to_owned()))?;
+        let reference = self.reference.clone().ok_or_else(|| {
+            Error::InvalidProposal("funding reference is not attached".to_owned())
+        })?;
         let handoff = broadcast_safe.commitment_safe_handoff(reference, balance)?;
         self.broadcast_safe = Some(broadcast_safe);
         self.state = LdkFundingSessionState::BroadcastSafe;
         Ok(Some(handoff))
     }
 
-    fn ensure_broadcast_safe_matches_session(&self, broadcast_safe: &LdkBroadcastSafe) -> Result<()> {
+    fn ensure_broadcast_safe_matches_session(
+        &self,
+        broadcast_safe: &LdkBroadcastSafe,
+    ) -> Result<()> {
         if broadcast_safe.former_temporary_channel_id != self.generation.temporary_channel_id {
             return Err(Error::InvalidProposal(
                 "broadcast-safe event belongs to a different temporary channel".to_owned(),
@@ -362,7 +367,9 @@ impl LdkFundingReference {
             .transaction
             .output
             .get(handoff.result.funding_outpoint.vout as usize)
-            .ok_or_else(|| Error::InvalidProposal("funding output index out of bounds".to_owned()))?;
+            .ok_or_else(|| {
+                Error::InvalidProposal("funding output index out of bounds".to_owned())
+            })?;
         let channel_value_sats = handoff.balance.initiator_sats + handoff.balance.counterparty_sats;
 
         if funding_output.value.to_sat() != channel_value_sats {

@@ -93,7 +93,10 @@ impl CorepcRegtestClient {
 
     pub fn get_wallet_transaction(&self, txid: Txid) -> Result<Value> {
         self.client
-            .call("gettransaction", &[json!(txid.to_string()), json!(false), json!(true)])
+            .call(
+                "gettransaction",
+                &[json!(txid.to_string()), json!(false), json!(true)],
+            )
             .map_err(map_corepc_error)
     }
 

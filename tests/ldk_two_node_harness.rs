@@ -87,8 +87,7 @@ fn two_ldk_nodes_accept_collaborative_manual_funding_outpoint() {
         .apply_manual(initiator.node)
         .expect("apply manual funding to ChannelManager");
 
-    let funding_created =
-        expect_funding_created(initiator, counterparty.node.get_our_node_id());
+    let funding_created = expect_funding_created(initiator, counterparty.node.get_our_node_id());
     counterparty
         .node
         .handle_funding_created(initiator.node.get_our_node_id(), &funding_created);
@@ -116,10 +115,12 @@ fn two_ldk_nodes_accept_collaborative_manual_funding_outpoint() {
         .expect("broadcast safe observation")
         .expect("commitment-safe handoff");
 
-    assert_eq!(handoff.result.funding_outpoint, funding_created.funding_txo());
+    assert_eq!(
+        handoff.result.funding_outpoint,
+        funding_created.funding_txo()
+    );
 
-    let (funding_messages, _channel_id) =
-        create_chan_between_nodes_with_value_confirm(
+    let (funding_messages, _channel_id) = create_chan_between_nodes_with_value_confirm(
         initiator,
         counterparty,
         &handoff.result.transaction,

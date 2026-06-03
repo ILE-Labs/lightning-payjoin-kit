@@ -79,8 +79,10 @@ fn privacy_input_handoff_does_not_allow_counterparty_channel_balance() {
 
 fn finalized_privacy_input_funding() -> (lightning_payjoin_kit::FundingResult, FundingScript) {
     let secp = secp256k1::Secp256k1::new();
-    let funding_script =
-        FundingScript::new_2of2(private_key(11).public_key(&secp), private_key(12).public_key(&secp));
+    let funding_script = FundingScript::new_2of2(
+        private_key(11).public_key(&secp),
+        private_key(12).public_key(&secp),
+    );
     let request = FundingRequest {
         channel_value_sats: 1_000_000,
         funding_script: funding_script.script_pubkey.clone(),

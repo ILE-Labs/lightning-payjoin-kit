@@ -160,12 +160,7 @@ fn p2wpkh_address(private_key: &PrivateKey) -> Address {
     Address::p2wpkh(&public_key, Network::Regtest)
 }
 
-fn funded_utxo(
-    rpc: &CorepcRegtestClient,
-    txid: Txid,
-    address: &Address,
-    value: Amount,
-) -> Utxo {
+fn funded_utxo(rpc: &CorepcRegtestClient, txid: Txid, address: &Address, value: Amount) -> Utxo {
     Utxo {
         outpoint: funded_outpoint(txid, funded_vout(rpc, txid, address)),
         value,
@@ -179,7 +174,9 @@ fn funded_outpoint(txid: Txid, vout: u32) -> OutPoint {
 }
 
 fn funded_vout(rpc: &CorepcRegtestClient, txid: Txid, address: &Address) -> u32 {
-    let tx = rpc.get_wallet_transaction(txid).expect("wallet transaction");
+    let tx = rpc
+        .get_wallet_transaction(txid)
+        .expect("wallet transaction");
     let vouts = tx
         .pointer("/decoded/vout")
         .and_then(Value::as_array)

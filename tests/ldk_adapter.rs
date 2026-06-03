@@ -176,8 +176,7 @@ fn ldk_manual_funding_applies_to_callback() {
     let captured: RefCell<Option<(ChannelId, secp256k1::PublicKey, LdkOutPoint)>> =
         RefCell::new(None);
     let callback = |temporary_channel_id, counterparty_node_id, funding_txo| {
-        *captured.borrow_mut() =
-            Some((temporary_channel_id, counterparty_node_id, funding_txo));
+        *captured.borrow_mut() = Some((temporary_channel_id, counterparty_node_id, funding_txo));
         Ok(())
     };
 
@@ -197,7 +196,9 @@ fn ldk_manual_funding_applies_to_callback() {
 fn ldk_manual_funding_propagates_callback_error() {
     let (manual, _reference) = manual_funding_fixture();
     let callback = |_temporary_channel_id, _counterparty_node_id, _funding_txo| {
-        Err(Error::InvalidProposal("callback rejected funding".to_owned()))
+        Err(Error::InvalidProposal(
+            "callback rejected funding".to_owned(),
+        ))
     };
 
     let error = manual.apply_to(&callback).expect_err("callback error");
@@ -297,7 +298,10 @@ fn ldk_broadcast_safe_event_builds_commitment_safe_handoff() {
         )
         .expect("commitment-safe handoff");
 
-    assert_eq!(handoff.commitment_safety, CommitmentSafety::CommitmentsExchanged);
+    assert_eq!(
+        handoff.commitment_safety,
+        CommitmentSafety::CommitmentsExchanged
+    );
     assert_eq!(handoff.mode, FundingMode::PrivacyInput);
     assert_eq!(handoff.balance.counterparty_sats, 0);
 }
@@ -310,8 +314,10 @@ fn ldk_event_helpers_ignore_unrelated_events() {
         former_temporary_channel_id: None,
         counterparty_node_id: public_key(66),
         funding_txo: OutPoint {
-            txid: Txid::from_str("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
-                .expect("txid"),
+            txid: Txid::from_str(
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            )
+            .expect("txid"),
             vout: 0,
         },
         channel_type: None,
@@ -359,21 +365,20 @@ fn ldk_funding_session_drives_manual_callback_to_broadcast_safe_handoff() {
         .attach_reference(reference.clone())
         .expect("manual funding");
     let manual_temporary_channel_id = manual.temporary_channel_id;
-    assert_eq!(
-        manual_temporary_channel_id,
-        generation.temporary_channel_id
-    );
+    assert_eq!(manual_temporary_channel_id, generation.temporary_channel_id);
     assert_eq!(session.state(), LdkFundingSessionState::ManualFundingReady);
 
     let captured: RefCell<Option<(ChannelId, secp256k1::PublicKey, LdkOutPoint)>> =
         RefCell::new(None);
     let callback = |temporary_channel_id, counterparty_node_id, funding_txo| {
-        *captured.borrow_mut() =
-            Some((temporary_channel_id, counterparty_node_id, funding_txo));
+        *captured.borrow_mut() = Some((temporary_channel_id, counterparty_node_id, funding_txo));
         Ok(())
     };
     session.apply_manual(&callback).expect("manual applied");
-    assert_eq!(session.state(), LdkFundingSessionState::ManualFundingApplied);
+    assert_eq!(
+        session.state(),
+        LdkFundingSessionState::ManualFundingApplied
+    );
     assert_eq!(
         *captured.borrow(),
         Some((
@@ -402,8 +407,14 @@ fn ldk_funding_session_drives_manual_callback_to_broadcast_safe_handoff() {
         .expect("handoff");
 
     assert_eq!(session.state(), LdkFundingSessionState::BroadcastSafe);
-    assert_eq!(handoff.commitment_safety, CommitmentSafety::CommitmentsExchanged);
-    assert_eq!(handoff.result.funding_outpoint, reference.bitcoin_outpoint());
+    assert_eq!(
+        handoff.commitment_safety,
+        CommitmentSafety::CommitmentsExchanged
+    );
+    assert_eq!(
+        handoff.result.funding_outpoint,
+        reference.bitcoin_outpoint()
+    );
 }
 
 #[test]
@@ -448,8 +459,10 @@ fn ldk_funding_session_rejects_broadcast_safe_for_wrong_channel() {
 
 fn finalized_privacy_input_funding() -> (lightning_payjoin_kit::FundingResult, FundingScript) {
     let secp = secp256k1::Secp256k1::new();
-    let funding_script =
-        FundingScript::new_2of2(private_key(11).public_key(&secp), private_key(12).public_key(&secp));
+    let funding_script = FundingScript::new_2of2(
+        private_key(11).public_key(&secp),
+        private_key(12).public_key(&secp),
+    );
     let request = FundingRequest {
         channel_value_sats: 1_000_000,
         funding_script: funding_script.script_pubkey.clone(),

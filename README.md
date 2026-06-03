@@ -162,7 +162,8 @@ cargo check --features ldk
 
 The `ldk` feature includes helpers for mapping `FundingGenerationReady` into a
 Payjoin funding request and `FundingTxBroadcastSafe` into the commitment-safe
-broadcast boundary.
+broadcast boundary. It also builds the manual funding payload needed for
+`ChannelManager::unsafe_manual_funding_transaction_generated`.
 
 ### Live regtest PoC
 

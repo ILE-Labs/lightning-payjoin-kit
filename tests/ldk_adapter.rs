@@ -11,7 +11,7 @@ use lightning_payjoin_kit::error::Error;
 use lightning_payjoin_kit::lightning::{
     commitment_safe_handoff, ldk_outpoint, ChannelBalance, CommitmentSafety, FundingScript,
     LdkBroadcastSafe, LdkFundingAdapter, LdkFundingGeneration, LdkFundingReference,
-    PayjoinChannelFunder,
+    LdkManualFunding, PayjoinChannelFunder,
 };
 use lightning_payjoin_kit::wallet::MemoryWallet;
 use lightning_payjoin_kit::{FundingCoordinator, FundingMode, FundingPolicy, FundingRequest};
@@ -132,6 +132,108 @@ fn ldk_broadcast_safe_event_marks_commitment_safe() {
     assert_eq!(broadcast_safe.channel_id, ChannelId([9; 32]));
     assert_eq!(broadcast_safe.user_channel_id, 77);
     assert_eq!(broadcast_safe.counterparty_node_id, public_key(55));
+}
+
+#[test]
+fn ldk_manual_funding_payload_matches_channel_manager_callback_shape() {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey.clone(),
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    ))
+    .expect("reference");
+    let generation = LdkFundingGeneration {
+        temporary_channel_id: ChannelId([7; 32]),
+        counterparty_node_id: public_key(77),
+        user_channel_id: 7_777,
+        request: FundingRequest {
+            channel_value_sats: reference.channel_value_sats,
+            funding_script: funding_script.script_pubkey,
+            mode: reference.mode,
+            fee_rate_sat_vb: 2.0,
+            deadline: Duration::from_secs(30),
+        },
+    };
+
+    let manual = LdkManualFunding::new(&generation, &reference).expect("manual funding");
+
+    assert_eq!(manual.temporary_channel_id, generation.temporary_channel_id);
+    assert_eq!(manual.counterparty_node_id, generation.counterparty_node_id);
+    assert_eq!(manual.funding_txo, reference.funding_txo);
+    assert_eq!(manual.user_channel_id, generation.user_channel_id);
+}
+
+#[test]
+fn ldk_manual_funding_rejects_event_reference_mismatch() {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey,
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    ))
+    .expect("reference");
+    let generation = LdkFundingGeneration {
+        temporary_channel_id: ChannelId([7; 32]),
+        counterparty_node_id: public_key(77),
+        user_channel_id: 7_777,
+        request: FundingRequest {
+            channel_value_sats: reference.channel_value_sats,
+            funding_script: ScriptBuf::new(),
+            mode: reference.mode,
+            fee_rate_sat_vb: 2.0,
+            deadline: Duration::from_secs(30),
+        },
+    };
+
+    let error = LdkManualFunding::new(&generation, &reference).expect_err("script mismatch");
+
+    assert!(matches!(error, Error::InvalidProposal(_)));
+}
+
+#[test]
+fn ldk_broadcast_safe_event_builds_commitment_safe_handoff() {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey,
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    ))
+    .expect("reference");
+    let event = Event::FundingTxBroadcastSafe {
+        channel_id: ChannelId([9; 32]),
+        user_channel_id: 77,
+        funding_txo: reference.bitcoin_outpoint(),
+        counterparty_node_id: public_key(55),
+        former_temporary_channel_id: ChannelId([8; 32]),
+    };
+    let broadcast_safe = LdkBroadcastSafe::from_event(&event).expect("broadcast safe event");
+
+    let handoff = broadcast_safe
+        .commitment_safe_handoff(
+            reference,
+            ChannelBalance {
+                initiator_sats: 1_000_000,
+                counterparty_sats: 0,
+            },
+        )
+        .expect("commitment-safe handoff");
+
+    assert_eq!(handoff.commitment_safety, CommitmentSafety::CommitmentsExchanged);
+    assert_eq!(handoff.mode, FundingMode::PrivacyInput);
+    assert_eq!(handoff.balance.counterparty_sats, 0);
 }
 
 #[test]

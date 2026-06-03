@@ -67,6 +67,44 @@ pub struct LdkBroadcastSafe {
     pub former_temporary_channel_id: ChannelId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LdkManualFunding {
+    pub temporary_channel_id: ChannelId,
+    pub counterparty_node_id: bitcoin::secp256k1::PublicKey,
+    pub funding_txo: LdkOutPoint,
+    pub user_channel_id: u128,
+}
+
+impl LdkManualFunding {
+    pub fn new(generation: &LdkFundingGeneration, reference: &LdkFundingReference) -> Result<Self> {
+        if reference.channel_value_sats != generation.request.channel_value_sats {
+            return Err(Error::InvalidProposal(format!(
+                "LDK funding value mismatch: event requested {} sats, reference has {} sats",
+                generation.request.channel_value_sats, reference.channel_value_sats
+            )));
+        }
+
+        if reference.funding_script_pubkey != generation.request.funding_script {
+            return Err(Error::InvalidProposal(
+                "LDK funding script mismatch between event and reference".to_owned(),
+            ));
+        }
+
+        if reference.mode != generation.request.mode {
+            return Err(Error::InvalidProposal(
+                "LDK funding mode mismatch between event and reference".to_owned(),
+            ));
+        }
+
+        Ok(Self {
+            temporary_channel_id: generation.temporary_channel_id,
+            counterparty_node_id: generation.counterparty_node_id,
+            funding_txo: reference.funding_txo,
+            user_channel_id: generation.user_channel_id,
+        })
+    }
+}
+
 impl LdkBroadcastSafe {
     pub fn from_event(event: &Event) -> Option<Self> {
         match event {
@@ -93,6 +131,30 @@ impl LdkBroadcastSafe {
 
     pub fn matches_reference(&self, reference: &LdkFundingReference) -> bool {
         self.funding_txo == reference.bitcoin_outpoint()
+    }
+
+    pub fn commitment_safe_handoff(
+        &self,
+        reference: LdkFundingReference,
+        balance: ChannelBalance,
+    ) -> Result<ChannelFundingHandoff> {
+        if !self.matches_reference(&reference) {
+            return Err(Error::InvalidProposal(
+                "LDK broadcast-safe outpoint does not match funding reference".to_owned(),
+            ));
+        }
+
+        Ok(ChannelFundingHandoff::new(
+            FundingResult {
+                transaction: reference.funding_transaction,
+                funding_outpoint: self.funding_txo,
+                fallback_used: false,
+            },
+            reference.funding_script_pubkey,
+            balance,
+            reference.mode,
+            self.commitment_safety(),
+        ))
     }
 }
 

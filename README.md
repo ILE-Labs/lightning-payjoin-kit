@@ -154,6 +154,12 @@ To compile the Bitcoin Core RPC adapter used by regtest PoC work:
 cargo check --features corepc
 ```
 
+To compile the LDK-facing funding reference adapter:
+
+```bash
+cargo check --features ldk
+```
+
 ### Live regtest PoC
 
 Start a local Bitcoin Core regtest node:
@@ -169,6 +175,12 @@ block:
 
 ```bash
 cargo test --features corepc --test corepc_regtest -- --ignored
+```
+
+The same live test can be compiled against the LDK adapter surface:
+
+```bash
+cargo test --features corepc,ldk --test corepc_regtest -- --ignored
 ```
 
 The test defaults to `http://127.0.0.1:18443` with RPC credentials

@@ -14,11 +14,12 @@ std = []
 mock-directory = []
 regtest = []
 corepc = ["dep:corepc-client"]
-ldk = []
+ldk = ["dep:lightning"]
 
 [dependencies]
 bitcoin = { version = "0.32", default-features = false, features = ["std", "serde"] }
 corepc-client = { version = "0.10", default-features = false, features = ["client-sync"], optional = true }
+lightning = { version = "0.2.2", default-features = false, features = ["std"], optional = true }
 secp256k1 = { version = "0.29", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

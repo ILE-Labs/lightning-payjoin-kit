@@ -192,6 +192,13 @@ The same live test can be compiled against the LDK adapter surface:
 cargo test --features corepc,ldk --test corepc_regtest -- --ignored
 ```
 
+The two-node LDK harness is compiled behind `ldk-test-utils` and runs LDK's
+real `ChannelManager` funding flow with a collaborative funding transaction:
+
+```bash
+cargo test --features ldk-test-utils --test ldk_two_node_harness -- --ignored
+```
+
 The test defaults to `http://127.0.0.1:18443` with RPC credentials
 `lpk` / `lpk`. Override them with `LPK_COREPC_URL`, `LPK_COREPC_USER`, and
 `LPK_COREPC_PASSWORD` if you run Bitcoin Core another way.

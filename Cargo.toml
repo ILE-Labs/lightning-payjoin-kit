@@ -15,6 +15,7 @@ mock-directory = []
 regtest = []
 corepc = ["dep:corepc-client"]
 ldk = ["dep:lightning"]
+ldk-test-utils = ["ldk", "lightning/_test_utils"]
 
 [dependencies]
 bitcoin = { version = "0.32", default-features = false, features = ["std", "serde"] }

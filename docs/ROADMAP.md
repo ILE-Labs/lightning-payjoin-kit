@@ -6,7 +6,7 @@ This document outlines the delivery timeline, key milestones, and KPIs for `ligh
 
 ## Phase 1: Core Protocol & Async Coordination
 **Target:** Weeks 1-4
-**Status:** In Progress
+**Status:** PoC complete; production hardening remaining
 
 The first phase focuses on building the standalone coordination engine capable of handling the offline-receiver problem inherent in Lightning channel openings.
 
@@ -14,8 +14,9 @@ The first phase focuses on building the standalone coordination engine capable o
 - [x] Define Relay API specifications and payload encryption.
 - [x] Implement the `PayjoinCoordinator` state machine.
 - [x] Build PSBT round-trip handling (initial proposal -> counterparty signature -> final assembly).
-- [ ] Implement UTXO selection algorithm optimized for multi-party privacy.
-- [ ] Create a lightweight mock relay server for local integration testing.
+- [x] Implement basic confirmed UTXO selection for the PoC.
+- [x] Create an in-memory mock directory for local integration testing.
+- [ ] Harden UTXO selection for production-grade multi-party privacy.
 
 ### Deliverables
 - A stable, zero-dependency `lightning-payjoin-kit` core crate.
@@ -25,19 +26,20 @@ The first phase focuses on building the standalone coordination engine capable o
 
 ## Phase 2: LDK Integration & Channel Funding
 **Target:** Weeks 5-8
-**Status:** Planned
+**Status:** PoC complete; production hardening remaining
 
 Phase 2 bridges the standalone coordination engine with the Lightning Development Kit (LDK), enabling seamless Payjoin channel openings.
 
 ### Objectives
-- [ ] Implement `PayjoinChannelFunder` trait matching LDK's channel creation flow.
-- [ ] Handle fallback scenarios (e.g., graceful degradation to standard single-funder if the counterparty rejects Payjoin).
-- [ ] Integrate fee estimation and network-specific validation.
-- [ ] End-to-end testing with LDK nodes on Regtest.
+- [x] Implement `PayjoinChannelFunder` trait matching LDK's channel creation flow.
+- [x] Handle fallback scenarios (e.g., graceful degradation to standard single-funder if the counterparty rejects Payjoin).
+- [x] Integrate fee estimation and network-specific validation.
+- [x] End-to-end testing with LDK nodes on Regtest.
 
 ### Deliverables
 - `ldk` feature flag enabling LDK-specific adapters.
-- E2E Regtest demonstration of a privately funded channel.
+- `ldk-test-utils` harness proving two LDK `ChannelManager`s accept a collaborative funding transaction and reach a usable channel.
+- Bitcoin Core regtest demonstration that broadcasts and mines the collaborative funding transaction through `corepc`.
 
 ---
 

@@ -154,6 +154,26 @@ To compile the Bitcoin Core RPC adapter used by regtest PoC work:
 cargo check --features corepc
 ```
 
+### Live regtest PoC
+
+Start a local Bitcoin Core regtest node:
+
+```bash
+docker compose up -d bitcoind
+```
+
+Then run the ignored integration test that mines funds, creates two peer inputs,
+builds the collaborative funding transaction, broadcasts it through `corepc`, and
+mines it into a regtest block:
+
+```bash
+cargo test --features corepc --test corepc_regtest -- --ignored
+```
+
+The test defaults to `http://127.0.0.1:18443` with RPC credentials
+`lpk` / `lpk`. Override them with `LPK_COREPC_URL`, `LPK_COREPC_USER`, and
+`LPK_COREPC_PASSWORD` if you run Bitcoin Core another way.
+
 ### Run the CLI (Milestone 3)
 
 ```bash

@@ -1,6 +1,8 @@
-use bitcoin::{Address, BlockHash, Transaction, Txid};
+use std::str::FromStr;
+
+use bitcoin::{Address, Amount, BlockHash, Denomination, Transaction, Txid};
 use corepc_client::client_sync::{self, v29::Client};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::chain::Broadcaster;
 use crate::error::{Error, Result};
@@ -75,6 +77,26 @@ impl CorepcRegtestClient {
             .map_err(|err| Error::CoreRpc(err.to_string()))
     }
 
+    pub fn send_to_address(&self, address: &Address, amount: Amount) -> Result<Txid> {
+        let value = self
+            .client
+            .call(
+                "sendtoaddress",
+                &[
+                    json!(address.to_string()),
+                    json!(amount.to_string_in(Denomination::Bitcoin)),
+                ],
+            )
+            .map_err(map_corepc_error)?;
+        parse_txid_value(value)
+    }
+
+    pub fn get_wallet_transaction(&self, txid: Txid) -> Result<Value> {
+        self.client
+            .call("gettransaction", &[json!(txid.to_string()), json!(false), json!(true)])
+            .map_err(map_corepc_error)
+    }
+
     pub fn broadcast(&self, transaction: &Transaction) -> Result<Txid> {
         self.client
             .send_raw_transaction(transaction)
@@ -91,4 +113,11 @@ impl Broadcaster for CorepcRegtestClient {
 
 fn map_corepc_error(error: corepc_client::client_sync::Error) -> Error {
     Error::CoreRpc(error.to_string())
+}
+
+fn parse_txid_value(value: Value) -> Result<Txid> {
+    let txid = value
+        .as_str()
+        .ok_or_else(|| Error::CoreRpc("RPC response did not contain a txid string".to_owned()))?;
+    Txid::from_str(txid).map_err(|err| Error::CoreRpc(err.to_string()))
 }

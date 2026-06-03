@@ -156,6 +156,10 @@ impl FundingPsbtBuilder {
         OutPoint { txid, vout }
     }
 
+    pub fn privacy_input_fee_contribution(&self) -> Amount {
+        Amount::from_sat(self.privacy_input_added_fee())
+    }
+
     pub fn build_privacy_input_proposal(
         &self,
         original: &Psbt,

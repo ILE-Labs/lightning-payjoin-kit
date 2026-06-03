@@ -1,5 +1,5 @@
 mod builder;
 mod finalize;
 
-pub use builder::FundingPsbtBuilder;
+pub use builder::{FallbackFunding, FundingPsbtBuilder};
 pub use finalize::FinalizedFunding;

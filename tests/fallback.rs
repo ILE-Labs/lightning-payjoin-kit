@@ -1,15 +1,30 @@
 use std::time::Duration;
 
-use bitcoin::ScriptBuf;
+use bitcoin::{Amount, OutPoint, ScriptBuf, Txid};
 use lightning_payjoin_kit::directory::MockDirectory;
-use lightning_payjoin_kit::wallet::MemoryWallet;
+use lightning_payjoin_kit::wallet::{MemoryWallet, Utxo};
 use lightning_payjoin_kit::{
     FundingCoordinator, FundingMode, FundingPolicy, FundingRequest, FundingState,
 };
+use std::str::FromStr;
 
 #[test]
 fn coordinator_moves_to_original_prepared() {
-    let wallet = MemoryWallet::default();
+    let wallet = MemoryWallet::new(
+        vec![Utxo {
+            outpoint: OutPoint {
+                txid: Txid::from_str(
+                    "2222222222222222222222222222222222222222222222222222222222222222",
+                )
+                .expect("txid"),
+                vout: 0,
+            },
+            value: Amount::from_sat(1_100_000),
+            script_pubkey: ScriptBuf::new(),
+            confirmed: true,
+        }],
+        vec![ScriptBuf::new()],
+    );
     let directory = MockDirectory::default();
     let mut coordinator = FundingCoordinator::new(wallet, directory, FundingPolicy::default());
 
@@ -23,6 +38,11 @@ fn coordinator_moves_to_original_prepared() {
         })
         .expect("prepare funding");
 
-    assert!(result.is_none());
+    let result = result.expect("funding result");
+    assert!(result.fallback_used);
+    assert_eq!(
+        result.transaction.output[0].value,
+        Amount::from_sat(1_000_000)
+    );
     assert_eq!(coordinator.state(), FundingState::OriginalPrepared);
 }

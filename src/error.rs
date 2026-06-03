@@ -14,6 +14,11 @@ pub enum Error {
     InvalidProposal(String),
     #[error("policy violation: {0}")]
     Policy(String),
+    #[error("insufficient funds: need {needed_sats} sats, available {available_sats} sats")]
+    InsufficientFunds {
+        needed_sats: u64,
+        available_sats: u64,
+    },
     #[error("coordination timed out")]
     Timeout,
     #[error("collaborative funding is unsupported by the counterparty")]

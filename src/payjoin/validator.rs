@@ -1,6 +1,9 @@
 use bitcoin::{Amount, Psbt};
 
 use crate::error::{Error, Result};
+use crate::wallet::Utxo;
+
+const DUST_CHANGE_SATS: u64 = 546;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposalValidation {
@@ -20,6 +23,75 @@ pub struct InitiatorProposalValidator<'a> {
     proposal: &'a Psbt,
     funding_output_index: usize,
     max_added_fee: Amount,
+}
+
+#[derive(Debug)]
+pub struct CounterpartyOriginalValidator<'a> {
+    original: &'a Psbt,
+    counterparty_utxo: &'a Utxo,
+    expected_channel_value: Amount,
+    max_fee_contribution: Amount,
+    required_fee_contribution: Amount,
+}
+
+impl<'a> CounterpartyOriginalValidator<'a> {
+    pub fn new(
+        original: &'a Psbt,
+        counterparty_utxo: &'a Utxo,
+        expected_channel_value: Amount,
+        max_fee_contribution: Amount,
+        required_fee_contribution: Amount,
+    ) -> Self {
+        Self {
+            original,
+            counterparty_utxo,
+            expected_channel_value,
+            max_fee_contribution,
+            required_fee_contribution,
+        }
+    }
+
+    fn validate_counterparty_input_is_fresh(&self) -> Result<()> {
+        let already_present = self
+            .original
+            .unsigned_tx
+            .input
+            .iter()
+            .any(|input| input.previous_output == self.counterparty_utxo.outpoint);
+
+        if already_present {
+            return Err(Error::InvalidProposal(
+                "counterparty input is already present in original PSBT".to_owned(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_counterparty_change_policy(&self) -> Result<()> {
+        if self.required_fee_contribution > self.max_fee_contribution {
+            return Err(Error::Policy(format!(
+                "required fee contribution exceeds policy: {} sats > {} sats",
+                self.required_fee_contribution.to_sat(),
+                self.max_fee_contribution.to_sat()
+            )));
+        }
+
+        let change_value = self
+            .counterparty_utxo
+            .value
+            .to_sat()
+            .checked_sub(self.required_fee_contribution.to_sat())
+            .ok_or_else(|| Error::Policy("counterparty input cannot pay fee".to_owned()))?;
+
+        if change_value < DUST_CHANGE_SATS {
+            return Err(Error::Policy(format!(
+                "counterparty change would be dust: {change_value} sats"
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> InitiatorProposalValidator<'a> {
@@ -51,6 +123,38 @@ impl<'a> InitiatorProposalValidator<'a> {
 
     fn proposal_output_value(&self) -> u64 {
         sum_output_values(self.proposal)
+    }
+}
+
+impl ProposalValidator for CounterpartyOriginalValidator<'_> {
+    fn validate(&self) -> Result<ProposalValidation> {
+        let funding_output = self.original.unsigned_tx.output.first().ok_or_else(|| {
+            Error::InvalidProposal("original PSBT missing funding output".to_owned())
+        })?;
+
+        if funding_output.value != self.expected_channel_value {
+            return Err(Error::InvalidProposal(format!(
+                "unexpected channel value: expected {} sats, got {} sats",
+                self.expected_channel_value.to_sat(),
+                funding_output.value.to_sat()
+            )));
+        }
+
+        let input_value = sum_input_values(self.original)?;
+        let output_value = sum_output_values(self.original);
+        let fee = input_value.checked_sub(output_value).ok_or_else(|| {
+            Error::InvalidProposal("original PSBT outputs exceed inputs".to_owned())
+        })?;
+
+        self.validate_counterparty_input_is_fresh()?;
+        self.validate_counterparty_change_policy()?;
+
+        Ok(ProposalValidation {
+            accepted: true,
+            added_inputs: 0,
+            added_outputs: 0,
+            added_fee: Amount::from_sat(fee),
+        })
     }
 }
 

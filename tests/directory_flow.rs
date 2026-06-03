@@ -105,3 +105,56 @@ fn coordinators_exchange_original_and_proposal_through_mock_directory() {
     assert_eq!(validation.added_outputs, 1);
     assert_eq!(validation.added_fee, Amount::from_sat(198));
 }
+
+#[test]
+fn initiator_finalizes_directory_proposal_as_broadcast_ready_result() {
+    let directory = MockDirectory::default();
+    let policy = FundingPolicy::default();
+    let mut initiator = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                1_100_000,
+                "4444444444444444444444444444444444444444444444444444444444444444",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        directory.clone(),
+        policy.clone(),
+    );
+    let mut counterparty = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                200_000,
+                "5555555555555555555555555555555555555555555555555555555555555555",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        directory,
+        policy,
+    );
+    let request = request();
+    let (session, original) = initiator
+        .post_original_to_directory(&request)
+        .expect("posted original");
+    counterparty
+        .propose_from_directory(&session.id, &request)
+        .expect("posted proposal");
+
+    let result = initiator
+        .finalize_proposal_from_directory(&session.id, &original.psbt)
+        .expect("finalized result");
+
+    assert_eq!(initiator.state(), FundingState::BroadcastReady);
+    assert!(!result.fallback_used);
+    assert_eq!(result.transaction.input.len(), 2);
+    assert_eq!(
+        result.transaction.output[0].value,
+        Amount::from_sat(1_000_000)
+    );
+    assert_eq!(
+        result.funding_outpoint.txid,
+        result.transaction.compute_txid()
+    );
+}

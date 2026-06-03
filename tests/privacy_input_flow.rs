@@ -82,6 +82,57 @@ fn coordinator_runs_privacy_input_flow_in_memory() {
 }
 
 #[test]
+fn coordinator_finalizes_validated_privacy_input_proposal() {
+    let policy = FundingPolicy::default();
+    let mut initiator = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                1_100_000,
+                "5555555555555555555555555555555555555555555555555555555555555555",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        MockDirectory::default(),
+        policy.clone(),
+    );
+    let mut counterparty = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                200_000,
+                "6666666666666666666666666666666666666666666666666666666666666666",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        MockDirectory::default(),
+        policy,
+    );
+    let request = request();
+    let original = initiator.prepare_original(&request).expect("original");
+    let proposal = counterparty
+        .propose_privacy_input(&original.psbt, &request)
+        .expect("proposal");
+
+    let result = initiator
+        .finalize_validated_proposal(&original.psbt, proposal.psbt)
+        .expect("funding result");
+
+    assert_eq!(initiator.state(), FundingState::BroadcastReady);
+    assert!(!result.fallback_used);
+    assert_eq!(result.transaction.input.len(), 2);
+    assert_eq!(
+        result.transaction.output[0].value,
+        Amount::from_sat(1_000_000)
+    );
+    assert_eq!(result.funding_outpoint.vout, 0);
+    assert_eq!(
+        result.funding_outpoint.txid,
+        result.transaction.compute_txid()
+    );
+}
+
+#[test]
 fn coordinator_rejects_unconfirmed_counterparty_utxo_when_policy_requires_confirmed() {
     let policy = FundingPolicy::default();
     let original = FundingCoordinator::new(

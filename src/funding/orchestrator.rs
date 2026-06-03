@@ -112,6 +112,19 @@ where
         self.validate_privacy_input_proposal(original, &proposal)
     }
 
+    pub fn finalize_proposal_from_directory(
+        &mut self,
+        session_id: &SessionId,
+        original: &Psbt,
+    ) -> Result<FundingResult> {
+        let proposal_payload = self
+            .directory
+            .get_payload_by_kind(session_id, PayjoinPayloadKind::Proposal)?
+            .ok_or_else(|| Error::Directory("proposal payload not found".to_owned()))?;
+        let proposal = proposal_payload.into_psbt(PayjoinPayloadKind::Proposal)?;
+        self.finalize_validated_proposal(original, proposal)
+    }
+
     pub fn propose_privacy_input(
         &mut self,
         original: &Psbt,
@@ -162,6 +175,25 @@ where
         .validate()?;
         self.state = FundingState::ProposalValidated;
         Ok(validation)
+    }
+
+    pub fn finalize_validated_proposal(
+        &mut self,
+        original: &Psbt,
+        proposal: Psbt,
+    ) -> Result<FundingResult> {
+        self.validate_privacy_input_proposal(original, &proposal)?;
+        let transaction = proposal.unsigned_tx;
+        let funding_outpoint = bitcoin::OutPoint {
+            txid: transaction.compute_txid(),
+            vout: 0,
+        };
+        self.state = FundingState::BroadcastReady;
+        Ok(FundingResult {
+            transaction,
+            funding_outpoint,
+            fallback_used: false,
+        })
     }
 
     fn builder_for(&self, request: &FundingRequest) -> FundingPsbtBuilder {

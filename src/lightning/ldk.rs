@@ -1,9 +1,17 @@
+use std::ops::Deref;
 use std::time::Duration;
 
 use bitcoin::{OutPoint, ScriptBuf, Transaction};
+use lightning::chain::chaininterface::{BroadcasterInterface, FeeEstimator};
 use lightning::chain::transaction::OutPoint as LdkOutPoint;
+use lightning::chain::Watch;
 use lightning::events::Event;
+use lightning::ln::channelmanager::ChannelManager;
 use lightning::ln::types::ChannelId;
+use lightning::onion_message::messenger::MessageRouter;
+use lightning::routing::router::Router;
+use lightning::sign::{EntropySource, NodeSigner, SignerProvider};
+use lightning::util::logger::Logger;
 
 use crate::error::{Error, Result};
 use crate::funding::{FundingMode, FundingRequest, FundingResult};
@@ -133,6 +141,44 @@ where
         funding_txo: LdkOutPoint,
     ) -> Result<()> {
         self(temporary_channel_id, counterparty_node_id, funding_txo)
+    }
+}
+
+impl<M, T, ES, NS, SP, F, R, MR, L> LdkManualFundingCallback
+    for ChannelManager<M, T, ES, NS, SP, F, R, MR, L>
+where
+    M: Deref,
+    T: Deref,
+    ES: Deref,
+    NS: Deref,
+    SP: Deref,
+    F: Deref,
+    R: Deref,
+    MR: Deref,
+    L: Deref,
+    M::Target: Watch<<SP::Target as SignerProvider>::EcdsaSigner>,
+    T::Target: BroadcasterInterface,
+    ES::Target: EntropySource,
+    NS::Target: NodeSigner,
+    SP::Target: SignerProvider,
+    F::Target: FeeEstimator,
+    R::Target: Router,
+    MR::Target: MessageRouter,
+    L::Target: Logger,
+{
+    fn unsafe_manual_funding_transaction_generated(
+        &self,
+        temporary_channel_id: ChannelId,
+        counterparty_node_id: bitcoin::secp256k1::PublicKey,
+        funding_txo: LdkOutPoint,
+    ) -> Result<()> {
+        ChannelManager::unsafe_manual_funding_transaction_generated(
+            self,
+            temporary_channel_id,
+            counterparty_node_id,
+            funding_txo,
+        )
+        .map_err(|err| Error::InvalidProposal(format!("{err:?}")))
     }
 }
 

@@ -164,7 +164,8 @@ The `ldk` feature includes helpers for mapping `FundingGenerationReady` into a
 Payjoin funding request and `FundingTxBroadcastSafe` into the commitment-safe
 broadcast boundary. It also builds the manual funding payload needed for
 `ChannelManager::unsafe_manual_funding_transaction_generated` and exposes a
-small callback trait matching that LDK method signature.
+small callback trait matching that LDK method signature. The trait is also
+implemented for LDK's real `ChannelManager` type under the `ldk` feature.
 
 ### Live regtest PoC
 

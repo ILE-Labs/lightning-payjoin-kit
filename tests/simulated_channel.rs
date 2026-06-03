@@ -1,4 +1,4 @@
-use bitcoin::{OutPoint, Txid};
+use bitcoin::{OutPoint, ScriptBuf, Txid};
 use lightning_payjoin_kit::lightning::{ChannelBalance, SimulatedChannel};
 use std::str::FromStr;
 
@@ -16,6 +16,7 @@ fn simulated_channel_keeps_explicit_balances() {
             initiator_sats: 1_000_000,
             counterparty_sats: 0,
         },
+        ScriptBuf::new(),
     );
 
     assert_eq!(channel.balance.counterparty_sats, 0);

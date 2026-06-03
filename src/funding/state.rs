@@ -7,6 +7,7 @@ pub enum FundingState {
     ProposalValidated,
     FinalSigned,
     BroadcastReady,
+    Broadcasted,
     FallbackReady,
     Failed,
 }

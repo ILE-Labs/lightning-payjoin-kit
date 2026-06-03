@@ -4,6 +4,7 @@
 //! funding orchestration, Payjoin-style session exchange, PSBT construction,
 //! wallet access, directory transport, and Lightning integration hooks.
 
+pub mod chain;
 pub mod directory;
 pub mod error;
 pub mod funding;

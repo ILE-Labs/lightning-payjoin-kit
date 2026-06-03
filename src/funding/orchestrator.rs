@@ -1,4 +1,5 @@
 use super::{FundingPolicy, FundingRequest, FundingResult, FundingState};
+use crate::chain::Broadcaster;
 use crate::directory::DirectoryClient;
 use crate::error::{Error, Result};
 use crate::payjoin::{
@@ -199,6 +200,16 @@ where
             funding_outpoint: finalized.funding_outpoint,
             fallback_used: false,
         })
+    }
+
+    pub fn broadcast_funding<B: Broadcaster>(
+        &mut self,
+        result: &FundingResult,
+        broadcaster: &mut B,
+    ) -> Result<bitcoin::Txid> {
+        let txid = broadcaster.broadcast_transaction(&result.transaction)?;
+        self.state = FundingState::Broadcasted;
+        Ok(txid)
     }
 
     fn builder_for(&self, request: &FundingRequest) -> FundingPsbtBuilder {

@@ -8,6 +8,8 @@ pub enum Error {
     Wallet(String),
     #[error("directory error: {0}")]
     Directory(String),
+    #[error("broadcast error: {0}")]
+    Broadcast(String),
     #[error("invalid PSBT: {0}")]
     InvalidPsbt(String),
     #[error("signing error: {0}")]

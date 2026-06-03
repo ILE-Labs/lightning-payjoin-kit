@@ -2,8 +2,8 @@ use super::{FundingPolicy, FundingRequest, FundingResult, FundingState};
 use crate::directory::DirectoryClient;
 use crate::error::{Error, Result};
 use crate::payjoin::{
-    CounterpartyOriginalValidator, InitiatorProposalValidator, ProposalValidation,
-    ProposalValidator,
+    CounterpartyOriginalValidator, InitiatorProposalValidator, PayjoinPayload, PayjoinPayloadKind,
+    PayjoinSession, ProposalValidation, ProposalValidator, SessionId,
 };
 use crate::psbt::{FallbackFunding, FundingPsbtBuilder, PrivacyInputProposal};
 use crate::wallet::{Utxo, Wallet};
@@ -69,6 +69,47 @@ where
             funding_outpoint,
             fallback_used: true,
         }))
+    }
+
+    pub fn post_original_to_directory(
+        &mut self,
+        request: &FundingRequest,
+    ) -> Result<(PayjoinSession, FallbackFunding)> {
+        let session = self.directory.create_session()?;
+        let fallback = self.prepare_original(request)?;
+        let payload = PayjoinPayload::from_psbt(PayjoinPayloadKind::Original, &fallback.psbt)?;
+        self.directory.post_payload(&session.id, payload)?;
+        self.state = FundingState::ProposalRequested;
+        Ok((session, fallback))
+    }
+
+    pub fn propose_from_directory(
+        &mut self,
+        session_id: &SessionId,
+        request: &FundingRequest,
+    ) -> Result<PrivacyInputProposal> {
+        let original_payload = self
+            .directory
+            .get_payload_by_kind(session_id, PayjoinPayloadKind::Original)?
+            .ok_or_else(|| Error::Directory("original payload not found".to_owned()))?;
+        let original = original_payload.into_psbt(PayjoinPayloadKind::Original)?;
+        let proposal = self.propose_privacy_input(&original, request)?;
+        let payload = PayjoinPayload::from_psbt(PayjoinPayloadKind::Proposal, &proposal.psbt)?;
+        self.directory.post_payload(session_id, payload)?;
+        Ok(proposal)
+    }
+
+    pub fn validate_proposal_from_directory(
+        &mut self,
+        session_id: &SessionId,
+        original: &Psbt,
+    ) -> Result<ProposalValidation> {
+        let proposal_payload = self
+            .directory
+            .get_payload_by_kind(session_id, PayjoinPayloadKind::Proposal)?
+            .ok_or_else(|| Error::Directory("proposal payload not found".to_owned()))?;
+        let proposal = proposal_payload.into_psbt(PayjoinPayloadKind::Proposal)?;
+        self.validate_privacy_input_proposal(original, &proposal)
     }
 
     pub fn propose_privacy_input(

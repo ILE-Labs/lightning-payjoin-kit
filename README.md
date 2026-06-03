@@ -163,8 +163,9 @@ docker compose up -d bitcoind
 ```
 
 Then run the ignored integration test that mines funds, creates two peer inputs,
-builds the collaborative funding transaction, broadcasts it through `corepc`, and
-mines it into a regtest block:
+builds the collaborative funding transaction, hands it through the Lightning
+funding boundary, broadcasts it through `corepc`, and mines it into a regtest
+block:
 
 ```bash
 cargo test --features corepc --test corepc_regtest -- --ignored

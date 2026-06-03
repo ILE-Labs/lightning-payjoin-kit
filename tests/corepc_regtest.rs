@@ -10,7 +10,10 @@ use bitcoin::{
 };
 use lightning_payjoin_kit::chain::{CorepcAuth, CorepcRegtestClient};
 use lightning_payjoin_kit::directory::MockDirectory;
-use lightning_payjoin_kit::lightning::{ChannelBalance, FundingScript, SimulatedChannel};
+use lightning_payjoin_kit::lightning::{
+    ChannelBalance, ChannelFundingHandoff, CommitmentSafety, FundingScript, PayjoinChannelFunder,
+    SimulatedChannelFunder,
+};
 use lightning_payjoin_kit::wallet::{MemoryWallet, Utxo};
 use lightning_payjoin_kit::{FundingCoordinator, FundingMode, FundingPolicy, FundingRequest};
 use serde_json::Value;
@@ -107,15 +110,20 @@ fn broadcasts_collaborative_funding_transaction_on_bitcoin_core_regtest() {
         .finalize_validated_proposal(&original.psbt, proposal.psbt)
         .expect("finalized funding result");
 
-    let channel = SimulatedChannel::from_funding_result(
-        &result,
+    let handoff = ChannelFundingHandoff::new(
+        result.clone(),
+        funding_script.script_pubkey,
         ChannelBalance {
             initiator_sats: 1_000_000,
             counterparty_sats: 0,
         },
-        funding_script.script_pubkey,
-    )
-    .expect("simulated channel from live funding transaction");
+        FundingMode::PrivacyInput,
+        CommitmentSafety::CommitmentsExchanged,
+    );
+    let mut channel_funder = SimulatedChannelFunder;
+    let channel = channel_funder
+        .accept_funding(handoff)
+        .expect("simulated channel from live funding transaction");
     assert_eq!(channel.funding_outpoint, result.funding_outpoint);
 
     let mut broadcaster = CorepcRegtestClient::new(&base_url, auth).expect("broadcast rpc");

@@ -1,7 +1,7 @@
-use bitcoin::{ScriptBuf, Transaction};
+use bitcoin::{Psbt, ScriptBuf, Transaction};
 
 use crate::error::Result;
-use crate::wallet::{Utxo, Wallet};
+use crate::wallet::{SigningSummary, Utxo, Wallet};
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryWallet {
@@ -29,5 +29,20 @@ impl Wallet for MemoryWallet {
 
     fn sign_owned_inputs(&self, _transaction: &mut Transaction) -> Result<()> {
         Ok(())
+    }
+
+    fn sign_owned_psbt(&self, psbt: &mut Psbt) -> Result<SigningSummary> {
+        let signed_inputs = psbt
+            .unsigned_tx
+            .input
+            .iter()
+            .filter(|input| {
+                self.utxos
+                    .iter()
+                    .any(|utxo| utxo.outpoint == input.previous_output)
+            })
+            .count();
+
+        Ok(SigningSummary { signed_inputs })
     }
 }

@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use bitcoin::{Amount, OutPoint, ScriptBuf, Txid};
 use lightning_payjoin_kit::directory::MockDirectory;
+use lightning_payjoin_kit::error::Error;
 use lightning_payjoin_kit::wallet::{MemoryWallet, Utxo};
 use lightning_payjoin_kit::{
     FundingCoordinator, FundingMode, FundingPolicy, FundingRequest, FundingState,
@@ -130,6 +131,59 @@ fn coordinator_finalizes_validated_privacy_input_proposal() {
         result.funding_outpoint.txid,
         result.transaction.compute_txid()
     );
+}
+
+#[test]
+fn coordinator_refuses_to_finalize_when_wallet_signs_no_inputs() {
+    let policy = FundingPolicy::default();
+    let mut initiator = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                1_100_000,
+                "7777777777777777777777777777777777777777777777777777777777777777",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        MockDirectory::default(),
+        policy.clone(),
+    );
+    let mut wrong_wallet_initiator = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                1_100_000,
+                "8888888888888888888888888888888888888888888888888888888888888888",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        MockDirectory::default(),
+        policy.clone(),
+    );
+    let mut counterparty = FundingCoordinator::new(
+        MemoryWallet::new(
+            vec![test_utxo(
+                200_000,
+                "9999999999999999999999999999999999999999999999999999999999999999",
+                0,
+            )],
+            vec![ScriptBuf::new()],
+        ),
+        MockDirectory::default(),
+        policy,
+    );
+    let request = request();
+    let original = initiator.prepare_original(&request).expect("original");
+    let proposal = counterparty
+        .propose_privacy_input(&original.psbt, &request)
+        .expect("proposal");
+
+    let error = wrong_wallet_initiator
+        .finalize_validated_proposal(&original.psbt, proposal.psbt)
+        .expect_err("no owned inputs signed");
+
+    assert!(matches!(error, Error::Signing(_)));
+    assert_ne!(wrong_wallet_initiator.state(), FundingState::BroadcastReady);
 }
 
 #[test]

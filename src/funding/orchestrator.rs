@@ -5,7 +5,7 @@ use crate::payjoin::{
     CounterpartyOriginalValidator, InitiatorProposalValidator, PayjoinPayload, PayjoinPayloadKind,
     PayjoinSession, ProposalValidation, ProposalValidator, SessionId,
 };
-use crate::psbt::{FallbackFunding, FundingPsbtBuilder, PrivacyInputProposal};
+use crate::psbt::{FallbackFunding, FinalizedFunding, FundingPsbtBuilder, PrivacyInputProposal};
 use crate::wallet::{Utxo, Wallet};
 use bitcoin::{Amount, Psbt};
 
@@ -183,15 +183,19 @@ where
         proposal: Psbt,
     ) -> Result<FundingResult> {
         self.validate_privacy_input_proposal(original, &proposal)?;
-        let transaction = proposal.unsigned_tx;
-        let funding_outpoint = bitcoin::OutPoint {
-            txid: transaction.compute_txid(),
-            vout: 0,
-        };
+        let mut proposal = proposal;
+        let signing_summary = self.wallet.sign_owned_psbt(&mut proposal)?;
+        if signing_summary.signed_inputs == 0 {
+            return Err(Error::Signing(
+                "wallet did not sign any proposal inputs".to_owned(),
+            ));
+        }
+
+        let finalized = FinalizedFunding::extract(proposal, 0, signing_summary)?;
         self.state = FundingState::BroadcastReady;
         Ok(FundingResult {
-            transaction,
-            funding_outpoint,
+            transaction: finalized.transaction,
+            funding_outpoint: finalized.funding_outpoint,
             fallback_used: false,
         })
     }

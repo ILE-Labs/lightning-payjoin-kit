@@ -2,4 +2,4 @@ mod memory;
 mod traits;
 
 pub use memory::MemoryWallet;
-pub use traits::{Utxo, Wallet};
+pub use traits::{SigningSummary, Utxo, Wallet};

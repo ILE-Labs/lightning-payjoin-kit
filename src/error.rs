@@ -10,6 +10,8 @@ pub enum Error {
     Directory(String),
     #[error("invalid PSBT: {0}")]
     InvalidPsbt(String),
+    #[error("signing error: {0}")]
+    Signing(String),
     #[error("invalid funding proposal: {0}")]
     InvalidProposal(String),
     #[error("policy violation: {0}")]

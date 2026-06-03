@@ -151,12 +151,13 @@ where
         )
         .validate()?;
 
-        let proposal = builder.build_privacy_input_proposal(
+        let mut proposal = builder.build_privacy_input_proposal(
             original,
             counterparty_utxo,
             change_script,
             Amount::from_sat(self.policy.max_counterparty_fee_contribution_sats),
         )?;
+        self.wallet.sign_owned_psbt(&mut proposal.psbt)?;
         self.state = FundingState::ProposalReceived;
         Ok(proposal)
     }

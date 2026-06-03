@@ -187,6 +187,68 @@ fn coordinator_refuses_to_finalize_when_wallet_signs_no_inputs() {
 }
 
 #[test]
+fn coordinator_finalizes_with_real_p2wpkh_witnesses_for_both_peers() {
+    let policy = FundingPolicy::default();
+    let initiator_outpoint = OutPoint {
+        txid: Txid::from_str("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            .expect("txid"),
+        vout: 0,
+    };
+    let counterparty_outpoint = OutPoint {
+        txid: Txid::from_str("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            .expect("txid"),
+        vout: 0,
+    };
+    let mut initiator = FundingCoordinator::new(
+        MemoryWallet::deterministic_p2wpkh(
+            initiator_outpoint,
+            Amount::from_sat(1_100_000),
+            1,
+            vec![ScriptBuf::new()],
+        )
+        .expect("initiator wallet"),
+        MockDirectory::default(),
+        policy.clone(),
+    );
+    let mut counterparty = FundingCoordinator::new(
+        MemoryWallet::deterministic_p2wpkh(
+            counterparty_outpoint,
+            Amount::from_sat(200_000),
+            2,
+            vec![ScriptBuf::new()],
+        )
+        .expect("counterparty wallet"),
+        MockDirectory::default(),
+        policy,
+    );
+    let request = request();
+    let original = initiator.prepare_original(&request).expect("original");
+    let proposal = counterparty
+        .propose_privacy_input(&original.psbt, &request)
+        .expect("proposal");
+
+    assert_eq!(
+        proposal.psbt.inputs[proposal.counterparty_input_index]
+            .final_script_witness
+            .as_ref()
+            .map(|witness| witness.len()),
+        Some(2)
+    );
+
+    let result = initiator
+        .finalize_validated_proposal(&original.psbt, proposal.psbt)
+        .expect("finalized signed result");
+
+    assert_eq!(result.transaction.input.len(), 2);
+    assert_eq!(result.transaction.input[0].witness.len(), 2);
+    assert_eq!(result.transaction.input[1].witness.len(), 2);
+    assert_eq!(
+        result.funding_outpoint.txid,
+        result.transaction.compute_txid()
+    );
+}
+
+#[test]
 fn coordinator_rejects_unconfirmed_counterparty_utxo_when_policy_requires_confirmed() {
     let policy = FundingPolicy::default();
     let original = FundingCoordinator::new(

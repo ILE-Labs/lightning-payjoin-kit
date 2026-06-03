@@ -136,8 +136,8 @@ println!("Channel funded privately: {}", payjoin_tx.txid());
 ### Prerequisites
 
 - Rust 1.75 or later
-- Bitcoin node (for testing: bitcoind in regtest mode)
-- Lightning node (LDK recommended for integration testing)
+- Bitcoin Core node for real chain tests (`bitcoind` in regtest mode, accessed through the optional `corepc` feature)
+- Lightning implementation for real channel integration tests (LDK is the preferred embedded Rust path)
 
 ### Build from source
 
@@ -146,6 +146,12 @@ git clone https://github.com/ILE-Labs/lightning-payjoin-kit
 cd lightning-payjoin-kit
 cargo build
 cargo test
+```
+
+To compile the Bitcoin Core RPC adapter used by regtest PoC work:
+
+```bash
+cargo check --features corepc
 ```
 
 ### Run the CLI (Milestone 3)

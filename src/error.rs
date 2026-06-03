@@ -10,6 +10,8 @@ pub enum Error {
     Directory(String),
     #[error("broadcast error: {0}")]
     Broadcast(String),
+    #[error("core rpc error: {0}")]
+    CoreRpc(String),
     #[error("invalid PSBT: {0}")]
     InvalidPsbt(String),
     #[error("signing error: {0}")]

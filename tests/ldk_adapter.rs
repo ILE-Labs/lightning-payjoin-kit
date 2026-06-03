@@ -1,9 +1,11 @@
 #![cfg(feature = "ldk")]
 
+use std::cell::RefCell;
 use std::str::FromStr;
 use std::time::Duration;
 
 use bitcoin::{key::PrivateKey, secp256k1, Amount, NetworkKind, OutPoint, ScriptBuf, Txid};
+use lightning::chain::transaction::OutPoint as LdkOutPoint;
 use lightning::events::Event;
 use lightning::ln::types::ChannelId;
 use lightning_payjoin_kit::directory::MockDirectory;
@@ -169,6 +171,41 @@ fn ldk_manual_funding_payload_matches_channel_manager_callback_shape() {
 }
 
 #[test]
+fn ldk_manual_funding_applies_to_callback() {
+    let (manual, _reference) = manual_funding_fixture();
+    let captured: RefCell<Option<(ChannelId, secp256k1::PublicKey, LdkOutPoint)>> =
+        RefCell::new(None);
+    let callback = |temporary_channel_id, counterparty_node_id, funding_txo| {
+        *captured.borrow_mut() =
+            Some((temporary_channel_id, counterparty_node_id, funding_txo));
+        Ok(())
+    };
+
+    manual.apply_to(&callback).expect("callback applied");
+
+    assert_eq!(
+        *captured.borrow(),
+        Some((
+            manual.temporary_channel_id,
+            manual.counterparty_node_id,
+            manual.funding_txo
+        ))
+    );
+}
+
+#[test]
+fn ldk_manual_funding_propagates_callback_error() {
+    let (manual, _reference) = manual_funding_fixture();
+    let callback = |_temporary_channel_id, _counterparty_node_id, _funding_txo| {
+        Err(Error::InvalidProposal("callback rejected funding".to_owned()))
+    };
+
+    let error = manual.apply_to(&callback).expect_err("callback error");
+
+    assert!(matches!(error, Error::InvalidProposal(_)));
+}
+
+#[test]
 fn ldk_manual_funding_rejects_event_reference_mismatch() {
     let (result, funding_script) = finalized_privacy_input_funding();
     let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
@@ -197,6 +234,35 @@ fn ldk_manual_funding_rejects_event_reference_mismatch() {
     let error = LdkManualFunding::new(&generation, &reference).expect_err("script mismatch");
 
     assert!(matches!(error, Error::InvalidProposal(_)));
+}
+
+fn manual_funding_fixture() -> (LdkManualFunding, LdkFundingReference) {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey.clone(),
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    ))
+    .expect("reference");
+    let generation = LdkFundingGeneration {
+        temporary_channel_id: ChannelId([7; 32]),
+        counterparty_node_id: public_key(77),
+        user_channel_id: 7_777,
+        request: FundingRequest {
+            channel_value_sats: reference.channel_value_sats,
+            funding_script: funding_script.script_pubkey,
+            mode: reference.mode,
+            fee_rate_sat_vb: 2.0,
+            deadline: Duration::from_secs(30),
+        },
+    };
+    let manual = LdkManualFunding::new(&generation, &reference).expect("manual funding");
+
+    (manual, reference)
 }
 
 #[test]

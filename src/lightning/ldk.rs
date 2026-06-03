@@ -103,6 +103,37 @@ impl LdkManualFunding {
             user_channel_id: generation.user_channel_id,
         })
     }
+
+    pub fn apply_to<C: LdkManualFundingCallback>(&self, callback: &C) -> Result<()> {
+        callback.unsafe_manual_funding_transaction_generated(
+            self.temporary_channel_id,
+            self.counterparty_node_id,
+            self.funding_txo,
+        )
+    }
+}
+
+pub trait LdkManualFundingCallback {
+    fn unsafe_manual_funding_transaction_generated(
+        &self,
+        temporary_channel_id: ChannelId,
+        counterparty_node_id: bitcoin::secp256k1::PublicKey,
+        funding_txo: LdkOutPoint,
+    ) -> Result<()>;
+}
+
+impl<F> LdkManualFundingCallback for F
+where
+    F: Fn(ChannelId, bitcoin::secp256k1::PublicKey, LdkOutPoint) -> Result<()>,
+{
+    fn unsafe_manual_funding_transaction_generated(
+        &self,
+        temporary_channel_id: ChannelId,
+        counterparty_node_id: bitcoin::secp256k1::PublicKey,
+        funding_txo: LdkOutPoint,
+    ) -> Result<()> {
+        self(temporary_channel_id, counterparty_node_id, funding_txo)
+    }
 }
 
 impl LdkBroadcastSafe {

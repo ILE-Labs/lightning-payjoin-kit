@@ -4,4 +4,4 @@ mod validator;
 
 pub use payload::{PayjoinPayload, PayjoinPayloadKind};
 pub use session::{Mailbox, PayjoinSession, SessionId};
-pub use validator::{ProposalValidation, ProposalValidator};
+pub use validator::{InitiatorProposalValidator, ProposalValidation, ProposalValidator};

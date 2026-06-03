@@ -35,6 +35,23 @@ pub struct LdkFundingGeneration {
     pub request: FundingRequest,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LdkFundingSessionState {
+    WaitingForFunding,
+    ManualFundingReady,
+    ManualFundingApplied,
+    BroadcastSafe,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LdkFundingSession {
+    generation: LdkFundingGeneration,
+    reference: Option<LdkFundingReference>,
+    manual: Option<LdkManualFunding>,
+    broadcast_safe: Option<LdkBroadcastSafe>,
+    state: LdkFundingSessionState,
+}
+
 impl LdkFundingGeneration {
     pub fn from_event(
         event: &Event,
@@ -63,6 +80,101 @@ impl LdkFundingGeneration {
             }),
             _ => None,
         }
+    }
+}
+
+impl LdkFundingSession {
+    pub fn new(generation: LdkFundingGeneration) -> Self {
+        Self {
+            generation,
+            reference: None,
+            manual: None,
+            broadcast_safe: None,
+            state: LdkFundingSessionState::WaitingForFunding,
+        }
+    }
+
+    pub fn generation(&self) -> &LdkFundingGeneration {
+        &self.generation
+    }
+
+    pub fn request(&self) -> &FundingRequest {
+        &self.generation.request
+    }
+
+    pub fn state(&self) -> LdkFundingSessionState {
+        self.state
+    }
+
+    pub fn reference(&self) -> Option<&LdkFundingReference> {
+        self.reference.as_ref()
+    }
+
+    pub fn manual(&self) -> Option<&LdkManualFunding> {
+        self.manual.as_ref()
+    }
+
+    pub fn attach_reference(&mut self, reference: LdkFundingReference) -> Result<&LdkManualFunding> {
+        let manual = LdkManualFunding::new(&self.generation, &reference)?;
+        self.reference = Some(reference);
+        self.manual = Some(manual);
+        self.state = LdkFundingSessionState::ManualFundingReady;
+        Ok(self
+            .manual
+            .as_ref()
+            .expect("manual funding was just attached"))
+    }
+
+    pub fn apply_manual<C: LdkManualFundingCallback>(&mut self, callback: &C) -> Result<()> {
+        let manual = self
+            .manual
+            .as_ref()
+            .ok_or_else(|| Error::InvalidProposal("manual funding is not ready".to_owned()))?;
+        manual.apply_to(callback)?;
+        self.state = LdkFundingSessionState::ManualFundingApplied;
+        Ok(())
+    }
+
+    pub fn observe_broadcast_safe_event(
+        &mut self,
+        event: &Event,
+        balance: ChannelBalance,
+    ) -> Result<Option<ChannelFundingHandoff>> {
+        let Some(broadcast_safe) = LdkBroadcastSafe::from_event(event) else {
+            return Ok(None);
+        };
+        self.ensure_broadcast_safe_matches_session(&broadcast_safe)?;
+
+        let reference = self
+            .reference
+            .clone()
+            .ok_or_else(|| Error::InvalidProposal("funding reference is not attached".to_owned()))?;
+        let handoff = broadcast_safe.commitment_safe_handoff(reference, balance)?;
+        self.broadcast_safe = Some(broadcast_safe);
+        self.state = LdkFundingSessionState::BroadcastSafe;
+        Ok(Some(handoff))
+    }
+
+    fn ensure_broadcast_safe_matches_session(&self, broadcast_safe: &LdkBroadcastSafe) -> Result<()> {
+        if broadcast_safe.former_temporary_channel_id != self.generation.temporary_channel_id {
+            return Err(Error::InvalidProposal(
+                "broadcast-safe event belongs to a different temporary channel".to_owned(),
+            ));
+        }
+
+        if broadcast_safe.counterparty_node_id != self.generation.counterparty_node_id {
+            return Err(Error::InvalidProposal(
+                "broadcast-safe event belongs to a different counterparty".to_owned(),
+            ));
+        }
+
+        if broadcast_safe.user_channel_id != self.generation.user_channel_id {
+            return Err(Error::InvalidProposal(
+                "broadcast-safe event belongs to a different user channel id".to_owned(),
+            ));
+        }
+
+        Ok(())
     }
 }
 

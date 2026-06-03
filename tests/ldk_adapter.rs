@@ -13,7 +13,7 @@ use lightning_payjoin_kit::error::Error;
 use lightning_payjoin_kit::lightning::{
     commitment_safe_handoff, ldk_outpoint, ChannelBalance, CommitmentSafety, FundingScript,
     LdkBroadcastSafe, LdkFundingAdapter, LdkFundingGeneration, LdkFundingReference,
-    LdkManualFunding, PayjoinChannelFunder,
+    LdkFundingSession, LdkFundingSessionState, LdkManualFunding, PayjoinChannelFunder,
 };
 use lightning_payjoin_kit::wallet::MemoryWallet;
 use lightning_payjoin_kit::{FundingCoordinator, FundingMode, FundingPolicy, FundingRequest};
@@ -326,6 +326,124 @@ fn ldk_event_helpers_ignore_unrelated_events() {
     )
     .is_none());
     assert!(LdkBroadcastSafe::from_event(&event).is_none());
+}
+
+#[test]
+fn ldk_funding_session_drives_manual_callback_to_broadcast_safe_handoff() {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let reference = LdkFundingReference::from_handoff(commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey.clone(),
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    ))
+    .expect("reference");
+    let generation = LdkFundingGeneration {
+        temporary_channel_id: ChannelId([21; 32]),
+        counterparty_node_id: public_key(21),
+        user_channel_id: 2_121,
+        request: FundingRequest {
+            channel_value_sats: reference.channel_value_sats,
+            funding_script: funding_script.script_pubkey,
+            mode: reference.mode,
+            fee_rate_sat_vb: 2.0,
+            deadline: Duration::from_secs(30),
+        },
+    };
+    let mut session = LdkFundingSession::new(generation.clone());
+
+    let manual = session
+        .attach_reference(reference.clone())
+        .expect("manual funding");
+    let manual_temporary_channel_id = manual.temporary_channel_id;
+    assert_eq!(
+        manual_temporary_channel_id,
+        generation.temporary_channel_id
+    );
+    assert_eq!(session.state(), LdkFundingSessionState::ManualFundingReady);
+
+    let captured: RefCell<Option<(ChannelId, secp256k1::PublicKey, LdkOutPoint)>> =
+        RefCell::new(None);
+    let callback = |temporary_channel_id, counterparty_node_id, funding_txo| {
+        *captured.borrow_mut() =
+            Some((temporary_channel_id, counterparty_node_id, funding_txo));
+        Ok(())
+    };
+    session.apply_manual(&callback).expect("manual applied");
+    assert_eq!(session.state(), LdkFundingSessionState::ManualFundingApplied);
+    assert_eq!(
+        *captured.borrow(),
+        Some((
+            generation.temporary_channel_id,
+            generation.counterparty_node_id,
+            reference.funding_txo
+        ))
+    );
+
+    let event = Event::FundingTxBroadcastSafe {
+        channel_id: ChannelId([22; 32]),
+        user_channel_id: generation.user_channel_id,
+        funding_txo: reference.bitcoin_outpoint(),
+        counterparty_node_id: generation.counterparty_node_id,
+        former_temporary_channel_id: generation.temporary_channel_id,
+    };
+    let handoff = session
+        .observe_broadcast_safe_event(
+            &event,
+            ChannelBalance {
+                initiator_sats: 1_000_000,
+                counterparty_sats: 0,
+            },
+        )
+        .expect("broadcast safe result")
+        .expect("handoff");
+
+    assert_eq!(session.state(), LdkFundingSessionState::BroadcastSafe);
+    assert_eq!(handoff.commitment_safety, CommitmentSafety::CommitmentsExchanged);
+    assert_eq!(handoff.result.funding_outpoint, reference.bitcoin_outpoint());
+}
+
+#[test]
+fn ldk_funding_session_rejects_broadcast_safe_for_wrong_channel() {
+    let (manual, reference) = manual_funding_fixture();
+    let generation = LdkFundingGeneration {
+        temporary_channel_id: manual.temporary_channel_id,
+        counterparty_node_id: manual.counterparty_node_id,
+        user_channel_id: manual.user_channel_id,
+        request: FundingRequest {
+            channel_value_sats: reference.channel_value_sats,
+            funding_script: reference.funding_script_pubkey.clone(),
+            mode: reference.mode,
+            fee_rate_sat_vb: 2.0,
+            deadline: Duration::from_secs(30),
+        },
+    };
+    let mut session = LdkFundingSession::new(generation);
+    session
+        .attach_reference(reference.clone())
+        .expect("reference attached");
+    let event = Event::FundingTxBroadcastSafe {
+        channel_id: ChannelId([22; 32]),
+        user_channel_id: manual.user_channel_id,
+        funding_txo: reference.bitcoin_outpoint(),
+        counterparty_node_id: manual.counterparty_node_id,
+        former_temporary_channel_id: ChannelId([99; 32]),
+    };
+
+    let error = session
+        .observe_broadcast_safe_event(
+            &event,
+            ChannelBalance {
+                initiator_sats: 1_000_000,
+                counterparty_sats: 0,
+            },
+        )
+        .expect_err("wrong temporary channel");
+
+    assert!(matches!(error, Error::InvalidProposal(_)));
 }
 
 fn finalized_privacy_input_funding() -> (lightning_payjoin_kit::FundingResult, FundingScript) {

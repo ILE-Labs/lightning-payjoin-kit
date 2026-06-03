@@ -166,6 +166,8 @@ broadcast boundary. It also builds the manual funding payload needed for
 `ChannelManager::unsafe_manual_funding_transaction_generated` and exposes a
 small callback trait matching that LDK method signature. The trait is also
 implemented for LDK's real `ChannelManager` type under the `ldk` feature.
+`LdkFundingSession` ties those pieces into the expected funding lifecycle:
+generation event, manual funding callback, and broadcast-safe event.
 
 ### Live regtest PoC
 

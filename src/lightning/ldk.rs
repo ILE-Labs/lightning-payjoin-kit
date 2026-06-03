@@ -1,8 +1,12 @@
+use std::time::Duration;
+
 use bitcoin::{OutPoint, ScriptBuf, Transaction};
 use lightning::chain::transaction::OutPoint as LdkOutPoint;
+use lightning::events::Event;
+use lightning::ln::types::ChannelId;
 
 use crate::error::{Error, Result};
-use crate::funding::{FundingMode, FundingResult};
+use crate::funding::{FundingMode, FundingRequest, FundingResult};
 
 use super::{ChannelBalance, ChannelFundingHandoff, CommitmentSafety, PayjoinChannelFunder};
 
@@ -13,6 +17,83 @@ pub struct LdkFundingReference {
     pub funding_script_pubkey: ScriptBuf,
     pub channel_value_sats: u64,
     pub mode: FundingMode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LdkFundingGeneration {
+    pub temporary_channel_id: ChannelId,
+    pub counterparty_node_id: bitcoin::secp256k1::PublicKey,
+    pub user_channel_id: u128,
+    pub request: FundingRequest,
+}
+
+impl LdkFundingGeneration {
+    pub fn from_event(
+        event: &Event,
+        mode: FundingMode,
+        fee_rate_sat_vb: f32,
+        deadline: Duration,
+    ) -> Option<Self> {
+        match event {
+            Event::FundingGenerationReady {
+                temporary_channel_id,
+                counterparty_node_id,
+                channel_value_satoshis,
+                output_script,
+                user_channel_id,
+            } => Some(Self {
+                temporary_channel_id: *temporary_channel_id,
+                counterparty_node_id: *counterparty_node_id,
+                user_channel_id: *user_channel_id,
+                request: FundingRequest {
+                    channel_value_sats: *channel_value_satoshis,
+                    funding_script: output_script.clone(),
+                    mode,
+                    fee_rate_sat_vb,
+                    deadline,
+                },
+            }),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LdkBroadcastSafe {
+    pub channel_id: ChannelId,
+    pub user_channel_id: u128,
+    pub funding_txo: OutPoint,
+    pub counterparty_node_id: bitcoin::secp256k1::PublicKey,
+    pub former_temporary_channel_id: ChannelId,
+}
+
+impl LdkBroadcastSafe {
+    pub fn from_event(event: &Event) -> Option<Self> {
+        match event {
+            Event::FundingTxBroadcastSafe {
+                channel_id,
+                user_channel_id,
+                funding_txo,
+                counterparty_node_id,
+                former_temporary_channel_id,
+            } => Some(Self {
+                channel_id: *channel_id,
+                user_channel_id: *user_channel_id,
+                funding_txo: *funding_txo,
+                counterparty_node_id: *counterparty_node_id,
+                former_temporary_channel_id: *former_temporary_channel_id,
+            }),
+            _ => None,
+        }
+    }
+
+    pub fn commitment_safety(&self) -> CommitmentSafety {
+        CommitmentSafety::CommitmentsExchanged
+    }
+
+    pub fn matches_reference(&self, reference: &LdkFundingReference) -> bool {
+        self.funding_txo == reference.bitcoin_outpoint()
+    }
 }
 
 impl LdkFundingReference {

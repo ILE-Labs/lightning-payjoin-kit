@@ -4,11 +4,14 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use bitcoin::{key::PrivateKey, secp256k1, Amount, NetworkKind, OutPoint, ScriptBuf, Txid};
+use lightning::events::Event;
+use lightning::ln::types::ChannelId;
 use lightning_payjoin_kit::directory::MockDirectory;
 use lightning_payjoin_kit::error::Error;
 use lightning_payjoin_kit::lightning::{
-    commitment_safe_handoff, ldk_outpoint, ChannelBalance, FundingScript, LdkFundingAdapter,
-    LdkFundingReference, PayjoinChannelFunder,
+    commitment_safe_handoff, ldk_outpoint, ChannelBalance, CommitmentSafety, FundingScript,
+    LdkBroadcastSafe, LdkFundingAdapter, LdkFundingGeneration, LdkFundingReference,
+    PayjoinChannelFunder,
 };
 use lightning_payjoin_kit::wallet::MemoryWallet;
 use lightning_payjoin_kit::{FundingCoordinator, FundingMode, FundingPolicy, FundingRequest};
@@ -69,6 +72,94 @@ fn ldk_reference_rejects_mismatched_funding_script() {
     assert!(matches!(error, Error::InvalidProposal(_)));
 }
 
+#[test]
+fn ldk_funding_generation_event_maps_to_funding_request() {
+    let output_script = ScriptBuf::new();
+    let event = Event::FundingGenerationReady {
+        temporary_channel_id: ChannelId([3; 32]),
+        counterparty_node_id: public_key(44),
+        channel_value_satoshis: 1_250_000,
+        output_script: output_script.clone(),
+        user_channel_id: 99,
+    };
+
+    let generation = LdkFundingGeneration::from_event(
+        &event,
+        FundingMode::PrivacyInput,
+        2.5,
+        Duration::from_secs(90),
+    )
+    .expect("funding generation event");
+
+    assert_eq!(generation.temporary_channel_id, ChannelId([3; 32]));
+    assert_eq!(generation.counterparty_node_id, public_key(44));
+    assert_eq!(generation.user_channel_id, 99);
+    assert_eq!(generation.request.channel_value_sats, 1_250_000);
+    assert_eq!(generation.request.funding_script, output_script);
+    assert_eq!(generation.request.mode, FundingMode::PrivacyInput);
+    assert_eq!(generation.request.fee_rate_sat_vb, 2.5);
+    assert_eq!(generation.request.deadline, Duration::from_secs(90));
+}
+
+#[test]
+fn ldk_broadcast_safe_event_marks_commitment_safe() {
+    let (result, funding_script) = finalized_privacy_input_funding();
+    let handoff = commitment_safe_handoff(
+        result,
+        funding_script.script_pubkey,
+        ChannelBalance {
+            initiator_sats: 1_000_000,
+            counterparty_sats: 0,
+        },
+        FundingMode::PrivacyInput,
+    );
+    let reference = LdkFundingReference::from_handoff(handoff).expect("reference");
+    let event = Event::FundingTxBroadcastSafe {
+        channel_id: ChannelId([9; 32]),
+        user_channel_id: 77,
+        funding_txo: reference.bitcoin_outpoint(),
+        counterparty_node_id: public_key(55),
+        former_temporary_channel_id: ChannelId([8; 32]),
+    };
+
+    let broadcast_safe = LdkBroadcastSafe::from_event(&event).expect("broadcast safe event");
+
+    assert_eq!(
+        broadcast_safe.commitment_safety(),
+        CommitmentSafety::CommitmentsExchanged
+    );
+    assert!(broadcast_safe.matches_reference(&reference));
+    assert_eq!(broadcast_safe.channel_id, ChannelId([9; 32]));
+    assert_eq!(broadcast_safe.user_channel_id, 77);
+    assert_eq!(broadcast_safe.counterparty_node_id, public_key(55));
+}
+
+#[test]
+fn ldk_event_helpers_ignore_unrelated_events() {
+    let event = Event::ChannelPending {
+        channel_id: ChannelId([1; 32]),
+        user_channel_id: 11,
+        former_temporary_channel_id: None,
+        counterparty_node_id: public_key(66),
+        funding_txo: OutPoint {
+            txid: Txid::from_str("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+                .expect("txid"),
+            vout: 0,
+        },
+        channel_type: None,
+        funding_redeem_script: None,
+    };
+
+    assert!(LdkFundingGeneration::from_event(
+        &event,
+        FundingMode::PrivacyInput,
+        1.0,
+        Duration::from_secs(30)
+    )
+    .is_none());
+    assert!(LdkBroadcastSafe::from_event(&event).is_none());
+}
+
 fn finalized_privacy_input_funding() -> (lightning_payjoin_kit::FundingResult, FundingScript) {
     let secp = secp256k1::Secp256k1::new();
     let funding_script =
@@ -123,6 +214,11 @@ fn finalized_privacy_input_funding() -> (lightning_payjoin_kit::FundingResult, F
         .expect("funding result");
 
     (result, funding_script)
+}
+
+fn public_key(secret_byte: u8) -> secp256k1::PublicKey {
+    let secp = secp256k1::Secp256k1::new();
+    secp256k1::PublicKey::from_secret_key(&secp, &private_key(secret_byte).inner)
 }
 
 fn private_key(secret_byte: u8) -> PrivateKey {

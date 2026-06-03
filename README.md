@@ -160,6 +160,10 @@ To compile the LDK-facing funding reference adapter:
 cargo check --features ldk
 ```
 
+The `ldk` feature includes helpers for mapping `FundingGenerationReady` into a
+Payjoin funding request and `FundingTxBroadcastSafe` into the commitment-safe
+broadcast boundary.
+
 ### Live regtest PoC
 
 Start a local Bitcoin Core regtest node:

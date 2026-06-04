@@ -1,274 +1,603 @@
 # Architecture — lightning-payjoin-kit
 
-This document describes the full technical architecture, protocol design, coordination mechanism, and security model for `lightning-payjoin-kit`.
+This document defines a refined architecture for building `lightning-payjoin-kit` to a credible Proof of Concept. The design is intentionally conservative: reuse existing Payjoin and Lightning protocol surfaces where possible, avoid custom cryptography, and prove the idea on regtest before claiming production readiness.
 
 ---
 
-## Overview
+## Executive Summary
 
-`lightning-payjoin-kit` solves a specific problem: standard Lightning channel openings use single-funder UTXO inputs that make node funding traceable on-chain. The library brings BIP-78 Payjoin coordination to the channel establishment flow so that funding transactions appear as multi-party inputs.
+`lightning-payjoin-kit` explores collaborative Lightning channel funding transactions that weaken the single-funder on-chain heuristic.
 
-The core challenge — and why this has not been built before — is that BIP-78 requires both parties to be online and coordinating in real time. Lightning channel openings happen asynchronously. This library solves the synchronization problem through a relay-based async coordination design.
+The original design framed the project as "BIP-78 Payjoin over an async relay." The refined design is:
+
+1. **Use BIP-77-style async Payjoin transport** for encrypted store-and-forward coordination.
+2. **Use BOLT v2 interactive transaction construction** as the natural Lightning funding surface.
+3. **Support a PoC mode where the counterparty contributes an input and receives equivalent change**, so the funding transaction has inputs from both peers while the counterparty does not intentionally add channel liquidity.
+4. **Fall back to normal single-funder channel opening** when collaborative funding cannot complete.
+
+This is not a claim that channel funding becomes anonymous. It is a claim that successful collaborative opens make common-input ownership and single-funder attribution less reliable.
 
 ---
 
-## System Components
+## Design Goals
 
+### Primary Goals
+
+- Construct a valid Lightning channel funding transaction with inputs from both channel peers.
+- Preserve correct Lightning channel accounting and commitment transaction safety.
+- Demonstrate the flow end-to-end on regtest.
+- Reuse BIP-77, PSBT, BOLT 2, and rust-bitcoin primitives instead of inventing a new wire protocol.
+- Provide a small Rust API that can later be adapted to LDK, CLN, or LND integration.
+
+### Non-Goals For PoC
+
+- Mainnet production use.
+- Full wallet-grade coin selection privacy.
+- New Lightning specification changes.
+- Hiding public channel capacity.
+- Hiding peer network metadata without OHTTP/Tor deployment.
+- Supporting every channel type, anchor variant, splice flow, and RBF policy in the first version.
+
+---
+
+## Protocol Foundations
+
+### Payjoin Layer
+
+The transport model should follow **BIP-77 Async Payjoin**, not a custom "encrypted BIP-78 relay."
+
+BIP-77 provides:
+
+- Store-and-forward directory semantics.
+- End-to-end encrypted Payjoin messages.
+- Sender and receiver mailboxes.
+- Optional metadata protection through OHTTP.
+- A fallback transaction model where either party can abandon the Payjoin proposal.
+
+For the PoC, the implementation may begin with a local mock directory and direct HTTP polling. The data model should still match BIP-77 concepts so the transport can later be swapped for a compliant directory/OHTTP implementation.
+
+### Lightning Layer
+
+The Lightning-native surface is **BOLT v2 channel establishment with interactive transaction construction**.
+
+Relevant concepts:
+
+- `open_channel2`
+- `accept_channel2`
+- `tx_add_input`
+- `tx_add_output`
+- `tx_complete`
+- `commitment_signed`
+- `tx_signatures`
+
+The PoC can initially model these messages locally instead of implementing a full peer stack. A stronger PoC should drive a real regtest node implementation that supports interactive funding.
+
+---
+
+## Funding Model
+
+There are two distinct modes. The architecture must keep them separate.
+
+### Mode A: True Dual Funding
+
+Both peers contribute liquidity to the channel.
+
+Example:
+
+```text
+Inputs:
+  A: 700_000 sats
+  B: 300_000 sats
+
+Outputs:
+  Channel funding output: 1_000_000 sats
+  A change
+  B change
 ```
+
+This uses BOLT v2 dual funding directly. It improves the on-chain single-funder pattern, but the counterparty must actually lock capital into the channel.
+
+### Mode B: Privacy-Input Funding
+
+The initiator funds the channel. The counterparty contributes an input and receives equivalent change, minus any agreed fee contribution.
+
+Example:
+
+```text
+Inputs:
+  A: 1_050_000 sats
+  B:   200_000 sats
+
+Outputs:
+  Channel funding output: 1_000_000 sats
+  A change: about 45_000 sats
+  B change: about 199_000 sats
+  Miner fee: about 6_000 sats
+```
+
+The counterparty input exists to break the simple single-funder input pattern. It does not mean the counterparty receives channel balance.
+
+This is the core research mode for `lightning-payjoin-kit`.
+
+Important constraints:
+
+- The channel funding output value must equal the Lightning-negotiated channel capacity.
+- The counterparty's Lightning balance must not increase unless this is true dual funding.
+- The counterparty must validate that its input is returned as change according to the agreed policy.
+- The initiator must validate that its channel funding output and change are not reduced beyond policy limits.
+
+---
+
+## System Architecture
+
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    lightning-payjoin-kit                        │
 │                                                                 │
-│  ┌─────────────────┐    ┌──────────────────┐                   │
-│  │  Coordination   │    │   PSBT Builder   │                   │
-│  │     Engine      │───▶│                  │                   │
-│  │  (async relay)  │    │  BIP-78 adapter  │                   │
-│  └────────┬────────┘    └────────┬─────────┘                   │
-│           │                      │                             │
-│  ┌────────▼────────┐    ┌────────▼─────────┐                   │
-│  │  Relay Client   │    │  UTXO Selector   │                   │
-│  │                 │    │                  │                   │
-│  │  Async message  │    │  Multi-party     │                   │
-│  │  coordination   │    │  input builder   │                   │
-│  └────────┬────────┘    └────────┬─────────┘                   │
-│           │                      │                             │
-│  ┌────────▼──────────────────────▼─────────┐                   │
-│  │            Channel Funding TX            │                   │
-│  │                                         │                   │
-│  │  Valid Payjoin PSBT ready for broadcast  │                   │
-│  └─────────────────────────────────────────┘                   │
+│  ┌──────────────────────┐        ┌──────────────────────────┐   │
+│  │ Funding Orchestrator │        │ Payjoin Session Engine   │   │
+│  │                      │◀──────▶│ BIP-77-style state       │   │
+│  └──────────┬───────────┘        └───────────┬──────────────┘   │
+│             │                                │                  │
+│             ▼                                ▼                  │
+│  ┌──────────────────────┐        ┌──────────────────────────┐   │
+│  │ PSBT Funding Builder │        │ Directory Client         │   │
+│  │ rust-bitcoin PSBT    │        │ mock first, BIP-77 later │   │
+│  └──────────┬───────────┘        └───────────┬──────────────┘   │
+│             │                                │                  │
+│             ▼                                ▼                  │
+│  ┌──────────────────────┐        ┌──────────────────────────┐   │
+│  │ Policy Validator     │        │ Wallet Adapter           │   │
+│  │ sender/receiver      │        │ inputs, change, signing  │   │
+│  └──────────┬───────────┘        └───────────┬──────────────┘   │
+│             │                                │                  │
+│             └───────────────┬────────────────┘                  │
+│                             ▼                                   │
+│                  Broadcast-ready funding tx                     │
 └─────────────────────────────────────────────────────────────────┘
-         │                          │
-         ▼                          ▼
-  ┌─────────────┐          ┌──────────────────┐
-  │  LDK Node   │          │  Bitcoin Network  │
-  │ Integration │          │   (on-chain tx)   │
-  └─────────────┘          └──────────────────┘
 ```
 
 ---
 
-## Protocol Design
+## Core Components
 
-### Why BIP-78
+### Funding Orchestrator
 
-BIP-78 (Payjoin) is a recognized Bitcoin standard for constructing multi-party transactions where inputs come from both the sender and receiver. The key insight is that a transaction with inputs from multiple parties cannot be attributed to a single wallet by standard chain analysis heuristics.
+Coordinates the complete channel funding attempt.
 
-`lightning-payjoin-kit` adapts BIP-78 for the specific context of Lightning channel funding, where:
+Responsibilities:
 
-1. The "sender" is the node operator opening a channel
-2. The "receiver" is the channel counterparty
-3. The "payment" is the channel funding output
-4. The timing is asynchronous — both parties do not need to be online simultaneously
+- Start a collaborative funding session.
+- Choose funding mode: true dual funding or privacy-input funding.
+- Track deadlines and fallback paths.
+- Expose a deterministic state machine for tests.
+- Hand completed transactions to the Lightning integration layer.
 
----
-
-### The Offline Receiver Problem
-
-Standard BIP-78 assumes both parties are online during coordination. This fails for Lightning because:
-
-- Channel openings are often initiated while the counterparty node is offline
-- Lightning nodes go offline for maintenance, routing, and other operational reasons
-- Real-time coordination requirements would make Payjoin impractical for channel management
-
-**Solution: Relay-based async coordination**
-
-```
-Node A (Initiator)                  Relay Server               Node B (Counterparty)
-       │                                 │                              │
-       │── POST /v2/payjoin ────────────▶│                              │
-       │   (initial PSBT)                │                              │
-       │                                 │◀─── GET /v2/poll ────────────│
-       │                                 │     (Node B comes online)    │
-       │                                 │─── PSBT for signing ────────▶│
-       │                                 │◀── Signed PSBT ──────────────│
-       │◀── Completed PSBT ─────────────│                              │
-       │                                 │                              │
-       │── Broadcast to Bitcoin network  │                              │
-```
-
-The relay holds the partial PSBT until the counterparty is available. The relay sees only encrypted PSBT data — it cannot read funding amounts or wallet addresses.
-
----
-
-## PSBT Construction
-
-### Single-Funder (Current — Traceable)
-
-```
-Transaction Inputs:
-  [0] 0xNode_A_Wallet:0 — 0.05 BTC    ← SINGLE FUNDER. TAGGED.
-
-Transaction Outputs:
-  [0] Channel Funding Script — 0.05 BTC
-  [1] Change to 0xNode_A_Wallet — 0.001 BTC
-```
-
-Chain analysis conclusion: Node A funded this channel from a known wallet. Channel size visible. Funding history clusterable.
-
----
-
-### Multi-Party Payjoin (With lightning-payjoin-kit — Private)
-
-```
-Transaction Inputs:
-  [0] 0xNode_A_Wallet:0 — 0.03 BTC    ─┐
-  [1] 0xNode_B_Wallet:0 — 0.02 BTC    ─┴── WHO FUNDED WHAT? UNKNOWN.
-
-Transaction Outputs:
-  [0] Channel Funding Script — 0.05 BTC
-  [1] Change (scattered) — cannot attribute
-```
-
-Chain analysis conclusion: Standard multi-input transaction. Cannot determine which input funded the channel. Cannot cluster either wallet's history from this transaction.
-
----
-
-## UTXO Selection
-
-The UTXO selection algorithm constructs inputs that:
-
-1. Sum to the required channel funding amount
-2. Come from at least two distinct wallet addresses (one per party minimum)
-3. Produce change outputs that do not reveal the original funding split
-4. Are valid inputs for a standard Bitcoin transaction
+Suggested states:
 
 ```rust
-pub struct UtxoSelector {
-    min_inputs: usize,       // Minimum 2 (one per party)
-    target_amount: u64,      // Channel funding amount in sats
-    fee_rate: FeeRate,       // Current network fee rate
-    coin_selection: CoinSelectionAlgorithm,
+pub enum FundingState {
+    Idle,
+    OriginalPrepared,
+    ProposalRequested,
+    ProposalReceived,
+    ProposalValidated,
+    FinalSigned,
+    BroadcastReady,
+    FallbackReady,
+    Failed,
 }
 ```
+
+### Payjoin Session Engine
+
+Handles BIP-77-style message exchange.
+
+Responsibilities:
+
+- Create session identifiers and mailbox references.
+- Encrypt and decrypt session payloads.
+- Poll or post through a directory client.
+- Keep transport concerns separate from transaction validation.
+
+For PoC, this can use a mock directory:
+
+```text
+POST /sessions
+POST /sessions/{id}/original
+GET  /sessions/{id}/original
+POST /sessions/{id}/proposal
+GET  /sessions/{id}/proposal
+```
+
+For production, this should converge toward BIP-77-compatible directory/OHTTP behavior rather than preserving the mock API.
+
+### PSBT Funding Builder
+
+Builds and modifies the Bitcoin transaction.
+
+Responsibilities:
+
+- Build an original PSBT with a valid fallback funding transaction.
+- Add counterparty inputs and change outputs.
+- Preserve the channel funding output.
+- Compute fees from complete UTXO data.
+- Support SegWit v0 and Taproot inputs where rust-bitcoin support is sufficient.
+
+The first PoC should support a narrow input matrix:
+
+- P2WPKH funding inputs.
+- Confirmed regtest UTXOs.
+- One initiator input and one counterparty input.
+- One channel funding output.
+- One change output per party.
+
+### Policy Validator
+
+Enforces Payjoin and Lightning safety rules before signing.
+
+Initiator checks:
+
+- The channel funding output is present.
+- The channel funding output script and amount are unchanged.
+- All original initiator inputs remain present.
+- Initiator change is not reduced beyond fee policy.
+- Transaction version, locktime, and sequences remain policy-valid.
+- Counterparty inputs include complete UTXO data.
+- The fee rate is within the agreed range.
+
+Counterparty checks:
+
+- The original/fallback transaction is valid enough for the agreed threat model.
+- Counterparty input is not exposed repeatedly across failed sessions without policy.
+- Counterparty change output pays the expected script.
+- Counterparty value loss is bounded by the agreed fee contribution.
+- No unexpected output steals counterparty value.
+
+Lightning checks:
+
+- Funding output value equals negotiated channel capacity.
+- Funding script matches the 2-of-2 channel funding script.
+- Commitment transaction signatures commit to the final funding outpoint.
+- The transaction is not broadcast before Lightning signatures are safely exchanged.
+
+### Wallet Adapter
+
+Abstracts wallet-specific operations.
+
+Responsibilities:
+
+- List spendable UTXOs.
+- Reserve and release UTXOs.
+- Derive change scripts.
+- Provide complete UTXO data for PSBT inputs.
+- Sign only owned inputs.
+- Refuse to sign unknown or policy-invalid inputs.
+
+PoC adapter:
+
+- In-memory regtest wallet fixtures.
+- Deterministic keys.
+- Manual UTXO injection for tests.
+
+Production adapters can target Bitcoin Core RPC, BDK, LDK wallet integrations, or node-specific plugin APIs.
+
+---
+
+## End-to-End PoC Flow
+
+### Step 1: Initiator Prepares Fallback
+
+Node A builds a standard single-funder channel funding PSBT:
+
+```text
+A input(s) -> channel funding output + A change
+```
+
+This transaction must be valid as a fallback.
+
+### Step 2: Initiator Posts Original
+
+Node A posts an encrypted original PSBT payload to the directory session.
+
+For the local PoC, the mock directory can store plaintext or test-encrypted payloads. The Rust API should still model encryption boundaries.
+
+### Step 3: Counterparty Builds Proposal
+
+Node B retrieves the original PSBT, validates it, and adds:
+
+- One B-owned input.
+- One B-owned change output.
+- Any fee contribution allowed by policy.
+
+Node B signs only B-owned inputs.
+
+### Step 4: Initiator Validates Proposal
+
+Node A retrieves the proposal and validates:
+
+- Channel funding output is unchanged.
+- A-owned inputs are unchanged.
+- A-owned outputs are policy-valid.
+- B inputs are finalized or otherwise verifiably signed.
+- Fee rate remains acceptable.
+
+Node A signs only A-owned inputs.
+
+### Step 5: Lightning Funding Finalization
+
+The final transaction is connected to the Lightning channel establishment flow:
+
+- Commitment signatures are exchanged.
+- The funding outpoint is fixed.
+- The transaction is broadcast only after the channel state is safe.
+
+For a lower-grade PoC, this step may be simulated and asserted in tests. For a strong PoC, it must open a real regtest channel.
+
+---
+
+## Proof-of-Concept Levels
+
+### Level 1: PSBT Demonstrator
+
+Qualifies as a protocol-construction demo.
+
+Requirements:
+
+- Rust crate compiles.
+- Builds original PSBT.
+- Counterparty adds input and change.
+- Both parties validate and sign.
+- Final transaction broadcasts on regtest.
+- Tests prove fallback transaction remains valid.
+
+Limitations:
+
+- Does not prove Lightning compatibility.
+- Does not open a real channel.
+
+### Level 2: Simulated Lightning Funding
+
+Qualifies as a stronger protocol PoC.
+
+Requirements:
+
+- Everything in Level 1.
+- Funding output script matches a Lightning 2-of-2 funding script.
+- Commitment transaction model references the final funding outpoint.
+- Tests assert channel balances are unchanged by privacy-input mode.
+
+Limitations:
+
+- Still does not prove integration with a production node implementation.
+
+### Level 3: Regtest Channel Open
+
+Qualifies as the target PoC for this project.
+
+Requirements:
+
+- Everything in Level 2.
+- Two regtest Lightning nodes complete channel establishment.
+- Funding transaction contains inputs from both peers.
+- Counterparty receives equivalent change in privacy-input mode.
+- Channel becomes usable after confirmation.
+- Fallback single-funder open succeeds when collaboration fails.
+
+This is the level that should be used for grant, research, or ecosystem validation claims.
 
 ---
 
 ## Security Model
 
-### Threat Model
+### Threats Mitigated
 
 | Threat | Mitigation |
 |--------|------------|
-| Chain surveillance deanonymizing channel funder | Multi-party inputs prevent single-funder attribution |
-| Relay server learning funding amounts | PSBT data encrypted before transmission to relay |
-| Man-in-the-middle tampering with PSBT | Signature verification on all PSBT rounds |
-| Double-spend via malicious PSBT injection | Input validation before signing in each round |
-| Relay denial of service blocking coordination | Timeout with fallback to standard channel opening |
-| Counterparty aborting after seeing inputs | Atomic PSBT completion — broadcast only on full signature |
+| Single-funder attribution | Include inputs from both peers in the funding transaction |
+| Common-input ownership heuristic | Use Payjoin-style collaborative input construction |
+| Malicious proposal modifies funding output | Initiator validates funding output script and value before signing |
+| Counterparty value theft | Counterparty validates change output and bounded fee loss |
+| Relay/directory message tampering | Authenticated encryption and PSBT validation |
+| Relay unavailability | Timeout and fallback transaction |
+| Premature broadcast | Broadcast only after Lightning commitment safety is reached |
 
-### What This Library Does NOT Protect Against
+### Threats Not Solved
 
-- IP address correlation (use Tor separately)
-- Channel graph analysis (routing privacy requires separate techniques)
-- On-chain analysis after channel close (closing transactions are out of scope)
-- Timing correlation across multiple channel openings
+- Public channel capacity visibility.
+- Channel graph and gossip correlation.
+- IP address correlation unless OHTTP/Tor is used.
+- Timing correlation between coordination and broadcast.
+- Counterparty UTXO probing without receiver-side reuse and exposure policy.
+- Wallet fingerprinting through script types, input counts, output ordering, and fee patterns.
+- On-chain close transaction analysis.
 
 ---
 
-## LDK Integration
+## Privacy Requirements
 
-`lightning-payjoin-kit` provides a first-class LDK integration interface:
+A successful privacy-input funding transaction should:
+
+- Use script types that do not trivially identify each party by wallet fingerprint.
+- Avoid obvious round-number change outputs where possible.
+- Randomize or policy-control input/output ordering.
+- Preserve a fee rate that does not make the Payjoin transformation obvious.
+- Avoid exposing fresh counterparty UTXOs to repeated failed attempts.
+- Record enough local metadata to reuse exposed UTXOs after aborts where appropriate.
+
+The PoC only needs to demonstrate the heuristic break. Production work needs a full coin selection and wallet fingerprinting review.
+
+---
+
+## Rust Crate Layout
+
+Proposed initial layout:
+
+```text
+src/
+  lib.rs
+  error.rs
+  funding/
+    mod.rs
+    orchestrator.rs
+    state.rs
+    mode.rs
+  payjoin/
+    mod.rs
+    session.rs
+    payload.rs
+    validator.rs
+  psbt/
+    mod.rs
+    builder.rs
+    finalize.rs
+  wallet/
+    mod.rs
+    traits.rs
+    memory.rs
+  directory/
+    mod.rs
+    client.rs
+    mock.rs
+  lightning/
+    mod.rs
+    funding_script.rs
+    simulated.rs
+tests/
+  psbt_roundtrip.rs
+  privacy_input_mode.rs
+  fallback.rs
+  simulated_channel.rs
+```
+
+Feature flags:
+
+```toml
+[features]
+default = ["std"]
+std = []
+mock-directory = []
+regtest = []
+ldk = ["dep:lightning"]
+```
+
+Core dependencies should be explicit rather than marketed as "zero dependency":
+
+- `bitcoin`
+- `secp256k1`
+- `thiserror`
+- `serde` for transport payloads
+- `tokio` or async traits for directory clients, if async transport is included
+- Optional `lightning` for LDK experiments
+
+---
+
+## Public API Sketch
 
 ```rust
-use lightning::chain::chaininterface::FeeEstimator;
-use lightning_payjoin_kit::ldk::PayjoinChannelFunder;
+pub struct FundingCoordinator<W, D> {
+    wallet: W,
+    directory: D,
+    policy: FundingPolicy,
+}
 
-// Replace standard channel funder with Payjoin-enabled version
-let payjoin_funder = PayjoinChannelFunder::new(
-    standard_channel_manager,
-    payjoin_coordinator,
-    relay_config,
-);
+pub enum FundingMode {
+    TrueDualFunding,
+    PrivacyInput,
+}
 
-// Channel openings now automatically use Payjoin when counterparty supports it
-// Falls back to standard opening if counterparty does not support Payjoin
-payjoin_funder.create_channel(
-    node_pubkey,
-    channel_value_satoshis,
-    push_msat,
-    user_channel_id,
-    override_config,
-).await?;
-```
+pub struct FundingRequest {
+    pub channel_value_sats: u64,
+    pub funding_script: bitcoin::ScriptBuf,
+    pub mode: FundingMode,
+    pub fee_rate_sat_vb: f32,
+    pub deadline: std::time::Duration,
+}
 
----
-
-## Relay Protocol
-
-The relay server implements a minimal HTTP API:
-
-```
-POST /v2/payjoin
-  Body: Encrypted initial PSBT + session token
-  Response: Session ID
-
-GET  /v2/session/{id}
-  Response: Current session state + counterparty PSBT if available
-
-POST /v2/session/{id}/sign
-  Body: Signed PSBT round
-  Response: Next PSBT round or completion signal
-```
-
-The relay server is stateless beyond session storage. It cannot read transaction contents. Session tokens are derived from the channel funding pubkeys so only the two channel parties can access their session.
-
----
-
-## Cryptographic Primitives
-
-| Primitive | Usage | Implementation |
-|-----------|-------|----------------|
-| secp256k1 | PSBT signing, key derivation | rust-secp256k1 |
-| ECDH | Session key derivation between parties | secp256k1 ECDH |
-| AES-256-GCM | PSBT encryption for relay transmission | Standard AEAD |
-| SHA-256 | Session token derivation | bitcoin_hashes |
-| BIP-340 Schnorr | Taproot input signing (where applicable) | rust-bitcoin |
-
----
-
-## Error Handling
-
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum PayjoinError {
-    #[error("Relay unreachable: {0}")]
-    RelayUnreachable(String),
-
-    #[error("Coordination timeout after {seconds}s")]
-    CoordinationTimeout { seconds: u64 },
-
-    #[error("Invalid PSBT from counterparty: {0}")]
-    InvalidPsbt(String),
-
-    #[error("UTXO selection failed: insufficient funds")]
-    InsufficientFunds,
-
-    #[error("Counterparty does not support Payjoin")]
-    PayjoinUnsupported,
+pub struct FundingResult {
+    pub transaction: bitcoin::Transaction,
+    pub funding_outpoint: bitcoin::OutPoint,
+    pub fallback_used: bool,
 }
 ```
 
-All errors include a fallback path to standard channel opening so that Payjoin failure never blocks channel establishment.
+The API should avoid pretending it can open a channel by itself. It constructs and coordinates the funding transaction; the Lightning node integration is responsible for channel state transitions.
 
 ---
 
-## Performance
+## Implementation Roadmap
 
-Target performance benchmarks (to be verified in M2 testing):
+### Phase 1: PSBT Core
 
-| Operation | Target |
-|-----------|--------|
-| PSBT construction | < 50ms |
-| Relay round-trip (online counterparty) | < 500ms |
-| Relay round-trip (offline counterparty, 30s poll) | < 60s |
-| Full coordination to broadcast-ready PSBT | < 90s (online) |
+- Create Rust crate.
+- Implement wallet traits and in-memory regtest wallet.
+- Build fallback funding PSBT.
+- Implement proposal construction for privacy-input mode.
+- Implement initiator and counterparty validators.
+- Add unit tests for value conservation and bounded fee loss.
+
+### Phase 2: Mock Async Coordination
+
+- Implement mock directory client.
+- Add state machine around original/proposal/final flow.
+- Add timeout and fallback behavior.
+- Add integration tests for online, delayed, rejected, and timeout sessions.
+
+### Phase 3: Simulated Lightning Funding
+
+- Generate 2-of-2 funding scripts.
+- Model funding outpoint and commitment preconditions.
+- Assert that privacy-input mode does not alter channel balances.
+- Broadcast final transaction on regtest.
+
+### Phase 4: Real Node PoC
+
+- Integrate with one Lightning implementation on regtest.
+- Prefer an implementation path that exposes interactive funding hooks.
+- Demonstrate a usable channel after confirmation.
+- Document unsupported channel types and policy constraints.
+
+### Phase 5: BIP-77/OHTTP Compliance
+
+- Replace mock directory with BIP-77-compatible payloads.
+- Add OHTTP support or document Tor-only test transport.
+- Add padding and metadata minimization.
+- Review against BIP-77 sender/receiver checklists.
 
 ---
 
-## Prior Art and References
+## Success Criteria
 
-- [BIP-78: Payjoin](https://github.com/bitcoin/bips/blob/master/bip-0078.mediawiki)
-- [Payjoin Dev Kit (PDK)](https://github.com/payjoin/rust-payjoin) — on-chain Payjoin, OpenSats funded
-- [BOLT 2: Channel Establishment](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md)
-- [LDK Channel Manager](https://docs.rs/lightning/latest/lightning/ln/channelmanager/struct.ChannelManager.html)
+The project reaches a credible PoC when:
+
+1. A regtest transaction funding a Lightning channel contains inputs from both peers.
+2. The counterparty's privacy input is returned as change in privacy-input mode.
+3. The channel funding output and channel accounting remain correct.
+4. The transaction confirms.
+5. The resulting channel becomes usable, or the simulation proves the exact funding outpoint and commitment preconditions.
+6. Collaboration failure falls back to a valid single-funder path.
+7. Tests cover malicious proposal attempts that modify funding output, steal change, alter fees, or request signatures for unknown inputs.
+
+---
+
+## Open Research Questions
+
+- Can privacy-input mode be represented cleanly inside existing BOLT v2 interactive funding implementations, or does it require node-specific extension hooks?
+- Which Lightning implementation exposes the least invasive path to a regtest PoC?
+- How should receiver UTXO exposure be managed after aborts?
+- What coin selection policy minimizes wallet fingerprinting while remaining practical?
+- How should fee contribution be negotiated so neither party can grief the other?
+- Does using a counterparty input with near-equal change create a recognizable fingerprint in itself?
+
+These questions do not block a PoC, but they do block production claims.
+
+---
+
+## References
+
+- [BIP-77: Async Payjoin](https://bips.dev/77/)
+- [BIP-78: A Simple Payjoin Proposal](https://bips.dev/78/)
+- [BOLT 2: Peer Protocol for Channel Management](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md)
+- [Payjoin Dev Kit](https://github.com/payjoin/rust-payjoin)
 - [rust-bitcoin](https://github.com/rust-bitcoin/rust-bitcoin)
+- [LDK](https://github.com/lightningdevkit/rust-lightning)

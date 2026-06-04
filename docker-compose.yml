@@ -1,0 +1,21 @@
+services:
+  bitcoind:
+    image: ${BITCOIN_IMAGE:-bitcoin/bitcoin:28.0}
+    command:
+      - -regtest=1
+      - -server=1
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=0.0.0.0/0
+      - -rpcuser=lpk
+      - -rpcpassword=lpk
+      - -fallbackfee=0.0002
+      - -txindex=1
+      - -printtoconsole=1
+      - -datadir=/data
+    ports:
+      - "18443:18443"
+    volumes:
+      - bitcoind-data:/data
+
+volumes:
+  bitcoind-data:

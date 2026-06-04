@@ -136,8 +136,8 @@ println!("Channel funded privately: {}", payjoin_tx.txid());
 ### Prerequisites
 
 - Rust 1.75 or later
-- Bitcoin node (for testing: bitcoind in regtest mode)
-- Lightning node (LDK recommended for integration testing)
+- Bitcoin Core node for real chain tests (`bitcoind` in regtest mode, accessed through the optional `corepc` feature)
+- Lightning implementation for real channel integration tests (LDK is the preferred embedded Rust path)
 
 ### Build from source
 
@@ -147,6 +147,61 @@ cd lightning-payjoin-kit
 cargo build
 cargo test
 ```
+
+To compile the Bitcoin Core RPC adapter used by regtest PoC work:
+
+```bash
+cargo check --features corepc
+```
+
+To compile the LDK-facing funding reference adapter:
+
+```bash
+cargo check --features ldk
+```
+
+The `ldk` feature includes helpers for mapping `FundingGenerationReady` into a
+Payjoin funding request and `FundingTxBroadcastSafe` into the commitment-safe
+broadcast boundary. It also builds the manual funding payload needed for
+`ChannelManager::unsafe_manual_funding_transaction_generated` and exposes a
+small callback trait matching that LDK method signature. The trait is also
+implemented for LDK's real `ChannelManager` type under the `ldk` feature.
+`LdkFundingSession` ties those pieces into the expected funding lifecycle:
+generation event, manual funding callback, and broadcast-safe event.
+
+### Live regtest PoC
+
+Start a local Bitcoin Core regtest node:
+
+```bash
+docker compose up -d bitcoind
+```
+
+Then run the ignored integration test that mines funds, creates two peer inputs,
+builds the collaborative funding transaction, hands it through the Lightning
+funding boundary, broadcasts it through `corepc`, and mines it into a regtest
+block:
+
+```bash
+cargo test --features corepc --test corepc_regtest -- --ignored
+```
+
+The same live test can be compiled against the LDK adapter surface:
+
+```bash
+cargo test --features corepc,ldk --test corepc_regtest -- --ignored
+```
+
+The two-node LDK harness is compiled behind `ldk-test-utils` and runs LDK's
+real `ChannelManager` funding flow with a collaborative funding transaction:
+
+```bash
+cargo test --features ldk-test-utils --test ldk_two_node_harness -- --ignored
+```
+
+The test defaults to `http://127.0.0.1:18443` with RPC credentials
+`lpk` / `lpk`. Override them with `LPK_COREPC_URL`, `LPK_COREPC_USER`, and
+`LPK_COREPC_PASSWORD` if you run Bitcoin Core another way.
 
 ### Run the CLI (Milestone 3)
 
@@ -164,6 +219,7 @@ lightning-payjoin-kit open-channel --amount 1000000 --peer <node_pubkey>
 | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Full technical architecture, protocol design, and security model |
 | [RESEARCH.md](./docs/RESEARCH.md) | Research process, alternative evaluation, and rationale |
 | [ROADMAP.md](./docs/ROADMAP.md) | Detailed milestones, KPIs, and delivery timeline |
+| [IMPLEMENTATION.md](./IMPLEMENTATION.md) | Implemented PoC surface, working flows, and local test commands |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute to the project |
 | [SECURITY.md](./SECURITY.md) | Responsible disclosure policy |
 

@@ -235,32 +235,6 @@ This project is part of ILE Labs' commitment to building open-source Bitcoin inf
 
 ---
 
-## Team
-
-**ILE Labs** — Open-source blockchain infrastructure
-
-**Onyekachukwu Nweke** — Protocol lead
-Threshold signatures, Lightning Network, cross-chain cryptographic protocols
-
-**Gospel Ifeadi** — Core Rust engineering
-Systems programming, WASM runtimes, production Rust infrastructure
-
-**Charles Emmanuel** — Project coordination
-GitHub: [@CodexEmmzy](https://github.com/CodexEmmzy)
-Telegram: [@charlesCode](https://t.me/charlesCode)
-
----
-
-## Prior Open-Source Work
-
-| Repository | Description |
-|------------|-------------|
-| [spark-note-poc](https://github.com/ILE-Labs/spark-note-poc) | ZK notes, commitments, nullifiers in Rust — cryptographic primitive foundation |
-| [stylus-debug-suite](https://github.com/ILE-Labs/stylus-debug-suite) | Production Rust toolkit, live on crates.io |
-| [mx-tx-simulator](https://github.com/ILE-Labs/mx-tx-simulator) | Protocol-level transaction simulator, fixed 4 SDK bugs |
-| [solana-cpi-lens](https://github.com/ILE-Labs/solana-cpi-lens) | Transaction call tree reconstruction |
-
----
 
 ## Contributing
 

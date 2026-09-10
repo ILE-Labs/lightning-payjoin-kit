@@ -41,7 +41,15 @@ We welcome ideas for new features or improvements. Please open an issue to discu
 
 ## Architecture and Protocol Design
 
-Before making significant changes, please read the [ARCHITECTURE.md](./docs/ARCHITECTURE.md) to understand the core design principles, specifically the async relay coordination and BIP-78 adaptation.
+Before making significant changes, please read the [research record](./research/)
+to understand where the project currently stands — in particular
+[the central result](./research/02-the-central-result.md), which finds that the
+construction the library was built around does not deliver the privacy property
+it was intended to.
+
+`docs/ARCHITECTURE.md` is retained for the record but superseded. It describes an
+async relay coordination layer and a BIP-78 adaptation, neither of which exists in
+the source tree.
 
 ## Review Process
 

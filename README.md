@@ -1,270 +1,280 @@
 # lightning-payjoin-kit
 
-> Asynchronous Rust library bringing collaborative Payjoin privacy (BIP-78) to Lightning Network channel funding
+A Rust library for constructing Lightning channel funding transactions
+collaboratively, so that an on-chain observer has a harder time determining which
+input paid for the channel.
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/ILE-Labs/lightning-payjoin-kit)
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
-[![Bitcoin](https://img.shields.io/badge/network-Bitcoin-f7931a)](https://bitcoin.org)
-[![Lightning](https://img.shields.io/badge/layer-Lightning-purple)](https://lightning.network)
+**Status: research. Do not deploy this.** The central question the library was
+built to answer has been answered, and the answer is negative. See
+[The central result](#the-central-result).
 
----
-
-## The Problem
-
-Every time a Lightning Network channel is opened, the funding transaction is broadcast to the public Bitcoin blockchain. Because standard channel openings use single-funder UTXO inputs, anyone analyzing the chain can:
-
-- Identify the exact wallet that funded the channel
-- Determine channel size and funding history
-- Cluster the node operator's complete financial activity over time
-
-This is not a theoretical risk. It is an active, exploitable metadata leak that affects every Lightning node operator globally — from individuals to businesses running payment infrastructure.
-
-```
-# What chain analysis sees today when you open a Lightning channel
-
-TXID: 0x4f2a...b201
-Input:  0xYour_Wallet — 0.05 BTC  ← YOUR FUNDING SOURCE. TAGGED.
-Output: Channel Funding — 0.05 BTC ← CHANNEL SIZE. VISIBLE.
-Output: Change — 0.001 BTC        ← YOUR WALLET. CONFIRMED.
-
-Result: Full node funding history deanonymized.
-```
-
-The Payjoin Dev Kit (PDK) addresses this problem for standard on-chain payments. No implementation exists for Lightning channel funding — until now.
+The library constructs and validates funding transactions. It does not open
+channels; channel state transitions remain the responsibility of the node
+implementation.
 
 ---
 
-## The Solution
+## The problem
 
-`lightning-payjoin-kit` brings BIP-78 Payjoin coordination to the Lightning channel establishment flow. Channel openings are constructed as multi-party transactions, eliminating the single-funder heuristic that makes node funding traceable.
+Opening a Lightning channel requires an on-chain transaction. In the standard case
+one party supplies every input, so the common-input-ownership heuristic applies
+correctly and clustering software attributes the funding source to the operator.
+From there an observer follows the operator's inputs backwards until they reach a
+KYC'd withdrawal, and the node has a name attached.
 
-```
-# What chain analysis sees with lightning-payjoin-kit
+This is measured, not hypothetical. Kappos et al. identified at least one
+participant in **86.8%** of private-channel opening transactions — 7.5% both
+participants, 79.3% one — using on-chain coin flow alone, with no gossip data. For
+public channels they identified the opening participant in 89.0%.
 
-TXID: 0x8b3d...c442
-Input:  0xParty_A — 0.03 BTC  ← Multiple funders. Who is who?
-Input:  0xParty_B — 0.02 BTC  ← Cannot determine.
-Output: Channel Funding — 0.05 BTC
-Output: Change — scattered
-
-Result: Standard multi-party transaction. Channel funder: unknown.
-```
-
-The privacy improvement is automatic and transparent to end users.
-
----
-
-## Architecture
-
-For a full technical breakdown of the coordination protocol, PSBT construction, async relay design, and security model, see:
-
-📄 **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)**
-
-Key design decisions at a glance:
-
-| Component | Design |
-|-----------|--------|
-| Coordination | Async relay-based, handles offline receiver |
-| Transaction format | BIP-78 Payjoin adapted for channel funding |
-| UTXO selection | Multi-party input construction |
-| PSBT handling | Round-trip signature coordination |
-| Node integration | LDK-compatible, FFI interface for CLN/LND |
-| Dependencies | Zero external dependencies in core library |
+Their attack follows the "peeling chain": operators fund each new channel from the
+change of the previous open, and spend closing outputs into new opens. That is a
+coin-selection pattern, and no amount of care inside a single transaction touches
+it.
 
 ---
 
-## Features
+## The central result
 
-- **Async coordination engine** — handles the Payjoin request-response cycle even when the funding counterparty is temporarily offline
-- **BIP-78 native** — implements the Payjoin standard adapted for Lightning channel contexts, not a custom protocol
-- **Zero-dependency core** — the coordination library has no external dependencies beyond standard Bitcoin libraries
-- **LDK integration** — first-class support for Lightning Development Kit with examples
-- **PSBT round-trip** — complete Partially Signed Bitcoin Transaction handling for multi-party channel funding
-- **Relay mechanism** — async relay design solves the offline receiver problem that prevents naive Payjoin from working on Lightning
-- **Channel size privacy** — multi-party input construction prevents single-funder heuristic detection
+The library's core idea is that a second party contributes an input to the funding
+transaction and receives the same value back as change, so the transaction has
+inputs under more than one ownership without the contributor locking up capital or
+taking channel balance.
 
----
+**Measurement finds that this construction can be partitioned by an observer with
+near-certainty, and that every fix currently planned leaves it that way.**
 
-## Status
+The reason is structural. Write `V` for the contributor's input and `C` for their
+change; they pay only fees, so `|V − C| ≤ F`, the total transaction fee. The
+initiator pays for the channel, so their input and change differ by at least the
+capacity `K`. For every channel worth opening, `K` is orders of magnitude larger
+than `F`. An observer sorts input/output pairs by absolute difference and takes the
+smallest.
 
->  This library is under active development. APIs are not yet stable.
+Attack success against a 50% chance baseline, over 20,000 generated transactions,
+stable across three seeds:
 
-| Milestone | Status | Target |
-|-----------|--------|--------|
-| M1: Async coordination engine |  In progress | Week 4 |
-| M2: Channel funding integration |  Planned | Week 8 |
-| M3: CLI + crates.io release |  Planned | Week 12 |
+| Attack | As built | With every planned fix applied |
+|---|---|---|
+| Fee-residue | 99.997% | 50.2% |
+| Subset-sum partitioning | 99.86% | 99.85% |
+| Near-equality (uses no fee arithmetic) | 99.75% | 99.76% |
+| Near-equality, all outputs taproot | — | 99.49% |
 
-See [ROADMAP.md](./docs/ROADMAP.md) for detailed milestone breakdown.
+Randomising the fee apportionment defeats the fee-residue attack completely. It
+moves subset-sum partitioning by one hundredth of a percentage point. Taproot
+outputs conceal *which* output is the channel; they do not conceal which input and
+output belong to the same party.
 
----
+There is a second problem, independent of the first. The transaction's structural
+signature — 2 inputs, 3 outputs, one P2WSH and two P2WPKH outputs — matches **2 of
+150,769** mainnet transactions in a 29.8-day sample, about **1 in 75,000**. Recast
+as a taproot channel it matches 7, about 1 in 21,500. Being that rare means an
+analyst can enumerate the candidates cheaply; being partitionable means each one
+then gives up its ownership structure.
 
-## Quick Start
+Both problems have the same root. A contributor who takes their money back needs a
+third output, and 84.41% of mainnet transactions have exactly two.
 
-```toml
-# Cargo.toml
-[dependencies]
-lightning-payjoin-kit = "0.1"
-```
+A construction in which the contributed value is absorbed into the funding output
+instead of returned as change resists subset-sum partitioning outright, and needs
+one fewer output. That is where this work now points. It is also, notably, what
+BOLT 2 dual funding already does.
 
-```rust
-use lightning_payjoin_kit::{PayjoinCoordinator, ChannelFundingConfig};
-
-// Initialize coordinator with your node's configuration
-let coordinator = PayjoinCoordinator::new(ChannelFundingConfig {
-    network: bitcoin::Network::Bitcoin,
-    relay_url: "https://relay.payjoin.org".parse()?,
-    channel_amount_sats: 1_000_000,
-})?;
-
-// Open a channel with Payjoin privacy
-// The library handles async coordination automatically
-let payjoin_tx = coordinator
-    .build_funding_transaction(counterparty_pubkey)
-    .await?;
-
-// payjoin_tx is a valid PSBT ready for broadcast
-// Channel funding origin is now private
-println!("Channel funded privately: {}", payjoin_tx.txid());
-```
+The full result, including what it does not establish, is in
+[research/02-the-central-result.md](./research/02-the-central-result.md). The
+harness that produced it is in
+[research/adversarial-harness/](./research/adversarial-harness/) and runs with one
+command.
 
 ---
 
-## Installation
+## What the library actually is today
 
-### Prerequisites
+- A **synchronous** Rust library. No async, no runtime, no I/O of its own.
+- **Payjoin-inspired, not BIP-78.** No HTTP endpoint, no BIP21 parameters, none of
+  the BIP-78 wire format. Messages are serialized PSBTs tagged with a payload kind.
+- **Five mandatory dependencies**: `bitcoin`, `secp256k1`, `serde`, `serde_json`,
+  `thiserror`. `corepc-client` and `lightning` are optional and feature-gated.
+- **No cryptography of its own.** Earlier documentation described an AES-256-GCM
+  layer with ECDH-derived session keys. It does not exist and never did; the claim
+  has been withdrawn.
+- **Not published.** Not on crates.io. There is no command-line tool.
 
-- Rust 1.75 or later
-- Bitcoin Core node for real chain tests (`bitcoind` in regtest mode, accessed through the optional `corepc` feature)
-- Lightning implementation for real channel integration tests (LDK is the preferred embedded Rust path)
+Nine claims from the earlier documentation did not survive verification. All nine,
+and their replacements, are in
+[research/01-claims-corrections.md](./research/01-claims-corrections.md).
 
-### Build from source
+---
+
+## Known defects in the construction
+
+Six, each with the correct construction and a citation for it, in
+[research/03-construction-risks.md](./research/03-construction-risks.md).
+
+| | Defect | Status |
+|---|---|---|
+| R-P1 | Contributor's change is their input minus exactly `99 × feerate`, so the fee rate is recoverable | Confirmed. 59 of 59 sampled transactions |
+| R-P2 | Fixed output ordering; funding output always at index 0 | Confirmed. 100% of samples |
+| R-P3 | `nSequence = 0xffffffff` and `nLockTime = 0` | Confirmed, and the fix is narrower than it first appeared. `nSequence = 0xfffffffd` with `nLockTime = 0` matches 64.68% of mainnet traffic against the current 28.09%. Anti-fee-sniping, which LDK recommends, would move the transaction into a 4.46% minority |
+| R-P4 | The P2WSH funding output is charged at the P2WPKH size of 31 bytes, not its true 43 | Confirmed. Effective fee rate is 94.84% of target at every rate tested |
+| R-P5 | No rate limiting and no reuse-after-abort policy, so contributor UTXOs can be enumerated for free | Confirmed. Optech flagged this class for dual funding in 2021 |
+| R-P6 | The contributor signs first and, unlike BIP-78's receiver, has no broadcastable fallback | Confirmed. Discussed against BIP-78's ordering and its rationale |
+
+R-P1 is the one the project has treated as critical. Fixing it does not deliver
+privacy, and fixing it *alone* would be the most misleading outcome available: the
+one attack the project had named would stop working while the transaction stayed
+fully partitionable.
+
+---
+
+## Verification status
+
+| Target | Result |
+|---|---|
+| V1 adversarial partitioning | **FAIL** — 99.85% with every planned fix applied |
+| V2 LDK two-node regression | **PASS** |
+| V3 Bitcoin Core regtest | **PASS** — mined into a real block |
+| V4 fee accuracy within 5% | **FAIL** — 94.84% of target at every rate tested |
+| V5 structural indistinguishability | **FAIL** — signature matches 2 of 150,769 mainnet transactions |
+| V6 probing resistance | **Not testable as written** — see the research record |
+| V7 round-trip timing | **PASS** — about 29,000× headroom |
+| V8 value conservation | Covered by the test suite; not independently re-verified |
+
+V1 is the gate, and V1 fails.
+
+The library works. It compiles, its 33 tests pass, two real LDK `ChannelManager`s
+accept its funding outpoint, and Bitcoin Core mines its transactions. What it does
+not do is deliver the privacy property its name promises.
+
+---
+
+## Two privacy profiles
+
+The library is announcement-agnostic. What differs between announced and
+unannounced channels is not the mechanism but the achievable result, and the two
+do not share a claims table.
+
+**Profile A, unannounced channels.** No `channel_announcement`, so an observer has
+no pointer to the funding output, no capacity figure and no node identities. Simple
+taproot channels compose here.
+
+**Profile B, announced channels.** Gossip publishes the funding outpoint, both node
+identities and the capacity. Those three are permanently public; routing requires
+them. Simple taproot channels **do not** compose here: the specification says the
+type "cannot be announced on the public network", and LND's release notes say
+taproot channels "must remain private until announced taproot channels are
+supported".
+
+So Layer 3 is available only to the profile that needs it least. That inverts the
+arrangement the project's earlier planning assumed. And measured against real
+traffic, taproot multiplies the anonymity set by about 3.5× — from 1 in 75,000 to 1
+in 21,500 — which is a real improvement and not a solution. It is set out in
+[research/05-composed-layers.md](./research/05-composed-layers.md).
+
+**On the measurements to date, neither profile gets funding-source unlinkability
+from this construction.** An earlier claims table gave both profiles "Yes" for
+unlinkable funding source, unconfirmed change, and a broken peeling chain. None of
+those three is currently supported for either profile, and the table will be rebuilt
+from measurements rather than from the mechanism's intent.
+
+---
+
+## Honest limitations
+
+**Permanently out of reach.** An announced channel's capacity, because routing
+requires it. A coin's history before the operator acquired it. The fact that a
+transaction occurred at all.
+
+**Out of reach of this layer specifically.** The peeling chain. Kappos et al.'s
+tracing heuristic reads transitions *between* transactions, and no construction
+inside a single transaction touches it. This is the attack that identified 86.8% of
+private-channel participants, and the answer to it is privacy-aware coin selection,
+not collaborative construction.
+
+**Residual even in the good case.** A colluding contributor knows which input was
+theirs. Statistical analysis across many opens by one operator may still cluster.
+
+**The standard this project holds itself to.** The technique is a probabilistic
+degradation of an adversary's confidence, not a proof of unlinkability. This
+project does not claim, and its documentation will not claim, that attribution
+becomes impossible. The claim is that it becomes unreliable — and on current
+measurements the library does not yet deliver even that.
+
+---
+
+## Prior art
+
+Collaborative funding of a Lightning channel is not new. BOLT 2 channel
+establishment v2 has both peers contribute inputs and is live in Core Lightning and
+Eclair. [nolooking](https://github.com/payjoin/nolooking) has opened channels from
+inbound BIP-78 payjoins since 2022.
+
+What this library adds is narrower: a construction in which the second party
+contributes an input and receives it back in full as change, taking on no channel
+balance and no capital lockup, over v1 channel establishment, so the peer needs no
+dual-funding support and no modification.
+
+That is a difference in mechanism, not in privacy achieved — and the measurements
+above find it is the reason the construction does not work. See
+[research/06-prior-art.md](./research/06-prior-art.md).
+
+---
+
+## Build
+
+Requires Rust 1.75 or later.
 
 ```bash
 git clone https://github.com/ILE-Labs/lightning-payjoin-kit
 cd lightning-payjoin-kit
 cargo build
-cargo test
+cargo test          # 33 tests, default feature set
 ```
 
-To compile the Bitcoin Core RPC adapter used by regtest PoC work:
+Optional adapters:
 
 ```bash
-cargo check --features corepc
+cargo check --features corepc   # Bitcoin Core RPC
+cargo check --features ldk      # LDK funding adapter
 ```
 
-To compile the LDK-facing funding reference adapter:
-
-```bash
-cargo check --features ldk
-```
-
-The `ldk` feature includes helpers for mapping `FundingGenerationReady` into a
-Payjoin funding request and `FundingTxBroadcastSafe` into the commitment-safe
-broadcast boundary. It also builds the manual funding payload needed for
-`ChannelManager::unsafe_manual_funding_transaction_generated` and exposes a
-small callback trait matching that LDK method signature. The trait is also
-implemented for LDK's real `ChannelManager` type under the `ldk` feature.
-`LdkFundingSession` ties those pieces into the expected funding lifecycle:
-generation event, manual funding callback, and broadcast-safe event.
-
-### Live regtest PoC
-
-Start a local Bitcoin Core regtest node:
+Integration tests that need external services are `#[ignore]`d:
 
 ```bash
 docker compose up -d bitcoind
-```
-
-Then run the ignored integration test that mines funds, creates two peer inputs,
-builds the collaborative funding transaction, hands it through the Lightning
-funding boundary, broadcasts it through `corepc`, and mines it into a regtest
-block:
-
-```bash
 cargo test --features corepc --test corepc_regtest -- --ignored
-```
-
-The same live test can be compiled against the LDK adapter surface:
-
-```bash
-cargo test --features corepc,ldk --test corepc_regtest -- --ignored
-```
-
-The two-node LDK harness is compiled behind `ldk-test-utils` and runs LDK's
-real `ChannelManager` funding flow with a collaborative funding transaction:
-
-```bash
 cargo test --features ldk-test-utils --test ldk_two_node_harness -- --ignored
 ```
 
-The test defaults to `http://127.0.0.1:18443` with RPC credentials
-`lpk` / `lpk`. Override them with `LPK_COREPC_URL`, `LPK_COREPC_USER`, and
-`LPK_COREPC_PASSWORD` if you run Bitcoin Core another way.
+The regtest test defaults to `http://127.0.0.1:18443` with RPC credentials
+`lpk`/`lpk`; override with `LPK_COREPC_URL`, `LPK_COREPC_USER` and
+`LPK_COREPC_PASSWORD`.
 
-### Run the CLI (Milestone 3)
+## Run the research harnesses
 
 ```bash
-cargo install lightning-payjoin-kit --features cli
-lightning-payjoin-kit open-channel --amount 1000000 --peer <node_pubkey>
+cd research/adversarial-harness && ./run.sh     # partitioning attacks, seeded
+cd research/mainnet-baseline    && ./run.sh     # fetches 31 mainnet blocks, parses locally
+cd research/roundtrip-timing    && ./run.sh     # round-trip latency under load
 ```
+
+The adversarial harness has no dependencies beyond the Rust standard library and
+is deterministic given a seed. The mainnet baseline fetches about 47 MB from public
+block explorers and parses raw consensus bytes locally — it verifies it consumed
+exactly each block's byte length and that its transaction count matches the
+explorer's, so a mirror serving bad data would be caught.
 
 ---
 
 ## Documentation
 
 | Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Full technical architecture, protocol design, and security model |
-| [RESEARCH.md](./docs/RESEARCH.md) | Research process, alternative evaluation, and rationale |
-| [ROADMAP.md](./docs/ROADMAP.md) | Detailed milestones, KPIs, and delivery timeline |
-| [IMPLEMENTATION.md](./IMPLEMENTATION.md) | Implemented PoC surface, working flows, and local test commands |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute to the project |
-| [SECURITY.md](./SECURITY.md) | Responsible disclosure policy |
-
----
-
-## Why This Exists
-
-The Payjoin Dev Kit (PDK), funded by OpenSats, has successfully improved privacy for standard Bitcoin on-chain payments. `lightning-payjoin-kit` is the natural extension of that work into the second layer.
-
-Lightning Network is now the primary payment method for millions of Bitcoin users. The on-chain footprint of their channel management deserves the same privacy treatment that Payjoin has brought to direct on-chain transactions. This library exists to close that gap.
-
-This project is part of ILE Labs' commitment to building open-source Bitcoin infrastructure. We do not build consumer products. We build the layer that other tools depend on.
-
----
-
-
-## Contributing
-
-This is a free and open-source project for the Bitcoin ecosystem. Contributions are welcome.
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-All contributors must agree to the [Developer Certificate of Origin (DCO)](https://developercertificate.org/).
-
----
+|---|---|
+| [research/](./research/) | The research record: corrections, measurements, open questions, sources |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
+| [SECURITY.md](./SECURITY.md) | Responsible disclosure |
 
 ## License
 
-Licensed under the Apache License, Version 2.0.
-
-See [LICENSE](./LICENSE) for the full license text.
-
-```
-Copyright 2026 ILE Labs
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-```
-
----
-
-## Contact
-
-- **Telegram:** [@charlesCode](https://t.me/charlesCode)
-- **Email:** contact@ilelab.org
+Apache 2.0. See [LICENSE](./LICENSE).

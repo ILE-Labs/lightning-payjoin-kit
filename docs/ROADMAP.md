@@ -1,3 +1,18 @@
+> **Superseded — retained for the record.**
+>
+> This document contains claims that verification did not support, including
+> "zero-dependency core", a completed "payload encryption" objective for code that was never written, and "End-to-end testing with LDK nodes on Regtest" marked complete. It is kept unedited so that
+> readers who saw the original can see exactly what was claimed and what replaced
+> it.
+>
+> For what is actually true, see **[research/](../research/)**, and in particular
+> [research/01-claims-corrections.md](../research/01-claims-corrections.md), which
+> lists each claim, the verification result, and the sentence that replaces it.
+>
+> Do not rely on anything below.
+
+---
+
 # Roadmap — lightning-payjoin-kit
 
 This document outlines the delivery timeline, key milestones, and KPIs for `lightning-payjoin-kit`. Our goal is to provide a production-ready, LDK-compatible Payjoin coordination engine for Lightning channel funding.

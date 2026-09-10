@@ -1,0 +1,47 @@
+# environment
+rustc 1.98.1 (48a229cea 2026-09-01)
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+Linux 6.17.0-1022-azure
+# cpus: 2
+# date (UTC)
+2026-09-10T14:12:15Z
+
+# collaborative round-trip latency (V7)
+# threads         = 8 concurrent sessions
+# sessions/thread = 20000
+# total sessions  = 160000
+# LDK window      = 60 ticks x ~60s = 3600s
+
+## Round-trip latency, all four protocol steps
+  sessions completed   160000
+  mean                       24.7 us
+  p50                         3.3 us
+  p90                         3.5 us
+  p99                         4.7 us
+  p99.9                   10019.3 us
+  max                    123997.2 us
+
+  wall clock                1.147 s for 160000 sessions across 8 threads
+  throughput               139465 sessions/s
+
+## Against LDK's unfunded-channel window
+  window                       3600 s
+  worst observed compute       0.123997 s
+  headroom factor              29033x
+  compute share of budget      0.00344437%
+
+## Budget decomposition (compute measured; network NOT measured)
+  The exchange is two messages: original -> proposal, then the initiator
+  completes locally. Over an established BOLT 8 connection that is one
+  round-trip. Assuming a pessimistic Tor round-trip and a contributor that
+  responds only after a long delay:
+    RTT    0.5s  ->  total     0.6s  =  0.017% of the window
+    RTT    2.0s  ->  total     2.1s  =  0.059% of the window
+    RTT   10.0s  ->  total    10.1s  =  0.281% of the window
+    RTT   60.0s  ->  total    60.1s  =  1.670% of the window
+    RTT  300.0s  ->  total   300.1s  =  8.337% of the window
+
+## V7 gate
+  pass condition, stated before running: the library's own compute must
+  consume under 1% of the window at the worst observed latency.
+  result: PASS

@@ -1,0 +1,15 @@
+[workspace]
+
+[package]
+name = "exp01-fee-residue-and-weight"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+lightning-payjoin-kit = { path = "../.." }
+bitcoin = { version = "0.32", default-features = false, features = ["std", "serde"] }
+
+[[bin]]
+name = "exp01"
+path = "src/main.rs"

@@ -1,0 +1,115 @@
+# environment
+rustc 1.98.1 (48a229cea 2026-09-01)
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+Linux 6.17.0-1022-azure
+# date (UTC)
+2026-09-10T09:45:42Z
+
+# Experiment 01 — fee residue, weight estimation, marginal cost
+# crate under test: lightning-payjoin-kit (path dependency, unmodified)
+
+## A. Measured TxOut serialized sizes (bytes)
+P2WPKH TxOut = 31
+P2WSH  TxOut = 43
+library constant P2WPKH_OUTPUT_VBYTES = 31 (src/psbt/builder.rs:9)
+delta charged-vs-actual for the P2WSH funding output = 12
+
+## B. R-P1 deterministic fee residue
+contrib_value  feerate  contrib_change  residue  99*feerate  residue==99r  r_recovered
+        20000        1           19901       99          99          true            1
+        55000        1           54901       99          99          true            1
+       199999        1          199900       99          99          true            1
+       200000        1          199901       99          99          true            1
+      1234567        1         1234468       99          99          true            1
+      5000000        1         4999901       99          99          true            1
+        20000        2           19802      198         198          true            2
+        55000        2           54802      198         198          true            2
+       199999        2          199801      198         198          true            2
+       200000        2          199802      198         198          true            2
+      1234567        2         1234369      198         198          true            2
+      5000000        2         4999802      198         198          true            2
+        20000        3           19703      297         297          true            3
+        55000        3           54703      297         297          true            3
+       199999        3          199702      297         297          true            3
+       200000        3          199703      297         297          true            3
+      1234567        3         1234270      297         297          true            3
+      5000000        3         4999703      297         297          true            3
+        20000        5           19505      495         495          true            5
+        55000        5           54505      495         495          true            5
+       199999        5          199504      495         495          true            5
+       200000        5          199505      495         495          true            5
+      1234567        5         1234072      495         495          true            5
+      5000000        5         4999505      495         495          true            5
+        20000        8           19208      792         792          true            8
+        55000        8           54208      792         792          true            8
+       199999        8          199207      792         792          true            8
+       200000        8          199208      792         792          true            8
+      1234567        8         1233775      792         792          true            8
+      5000000        8         4999208      792         792          true            8
+        20000       13           18713     1287        1287          true           13
+        55000       13           53713     1287        1287          true           13
+       199999       13          198712     1287        1287          true           13
+       200000       13          198713     1287        1287          true           13
+      1234567       13         1233280     1287        1287          true           13
+      5000000       13         4998713     1287        1287          true           13
+        20000       21           17921     2079        2079          true           21
+        55000       21           52921     2079        2079          true           21
+       199999       21          197920     2079        2079          true           21
+       200000       21          197921     2079        2079          true           21
+      1234567       21         1232488     2079        2079          true           21
+      5000000       21         4997921     2079        2079          true           21
+        20000       50           15050     4950        4950          true           50
+        55000       50           50050     4950        4950          true           50
+       199999       50          195049     4950        4950          true           50
+       200000       50          195050     4950        4950          true           50
+      1234567       50         1229617     4950        4950          true           50
+      5000000       50         4995050     4950        4950          true           50
+        20000      100           10100     9900        9900          true          100
+        55000      100           45100     9900        9900          true          100
+       199999      100          190099     9900        9900          true          100
+       200000      100          190100     9900        9900          true          100
+      1234567      100         1224667     9900        9900          true          100
+      5000000      100         4990100     9900        9900          true          100
+        20000      300               -        -       29700           n/a            -   REJECTED: policy violation: counterparty input cannot pay added fee
+        55000      300           25300    29700       29700          true          300
+       199999      300          170299    29700       29700          true          300
+       200000      300          170300    29700       29700          true          300
+      1234567      300         1204867    29700       29700          true          300
+      5000000      300         4970300    29700       29700          true          300
+
+R-P1 residue == 99*feerate in 59/60 sampled configurations
+(1/60 configurations were rejected by library policy before a transaction existed)
+of the 59 configurations that produced a transaction, the residue held in 59
+
+## C. R-P4 fee accuracy (V4 target: within 5% of requested rate)
+feerate  tx_vsize  fee_paid  effective_rate  pct_of_target  within_5pct
+      1       252       239          0.9484         94.84%        false
+      2       252       478          1.8968         94.84%        false
+      5       252      1195          4.7421         94.84%        false
+     10       252      2390          9.4841         94.84%        false
+     25       252      5975         23.7103         94.84%        false
+     50       252     11950         47.4206         94.84%        false
+    100       252     23900         94.8413         94.84%        false
+
+V4 (within 5% of target) holds in 0/7 sampled rates
+
+## D. Marginal on-chain cost vs the single-funder fallback (doc claim 7)
+single-funder fallback vsize   = 153
+collaborative proposal vsize   = 252
+measured marginal vsize        = 99
+library charges the contributor  = 99 vbytes x feerate
+under-charge per collaborative tx = 0 vbytes x feerate
+
+## E. Structural fields as produced (R-P2, R-P3)
+version    = 2
+lock_time  = 0
+n_inputs   = 2   n_outputs = 3
+input[0].sequence = 0xffffffff
+input[1].sequence = 0xffffffff
+output[0] =    1000000 sat  P2WSH (funding)
+output[1] =      99860 sat  P2WPKH (change)
+output[2] =     199901 sat  P2WPKH (change)
+funding_output_index (fallback) = 0
+contributor_input_index         = 1
+contributor_change_output_index = 2
+all sequences == Sequence::MAX  = true

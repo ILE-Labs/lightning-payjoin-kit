@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "collabfund-adversary"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Adversarial partitioning harness for collaborative Bitcoin funding transactions"
+
+[dependencies]
+
+[[bin]]
+name = "adversary"
+path = "src/main.rs"
+
+[profile.release]
+debug = false

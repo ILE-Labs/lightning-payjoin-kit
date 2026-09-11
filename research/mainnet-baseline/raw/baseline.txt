@@ -1,0 +1,106 @@
+# environment
+Python 3.12.3
+Linux 6.17.0-1022-azure
+# date (UTC)
+2026-09-10T14:22:52Z
+
+# Mainnet structural baseline
+# blocks       : 31 sampled every 144 from height 966300
+# span         : 29.8 days
+# transactions : 150769 non-coinbase (150800 incl. coinbase)
+# inputs       : 246647
+
+## nSequence, per input
+  0xfffffffd (BIP125 RBF)       134367   54.48%
+  0xffffffff (final)            101257   41.05%
+  < 0xfffffffd (other RBF)       10437    4.23%
+  0xfffffffe (non-final)           586    0.24%
+
+## nSequence, per transaction
+  all inputs 0xffffffff          42446   28.15%
+  any input signals RBF         108038   71.66%
+  mixed sequences within tx        180    0.12%
+
+## nLockTime
+  zero                          143739   95.34%
+  height within 100 of own block (anti-fee-sniping window)
+                                  6719    4.46%
+  other block height               156    0.10%
+  timestamp locktime               155    0.10%
+
+## Metadata combinations, ranked by how common they actually are
+  all RBF-signalling + nLockTime 0                        101171   67.10%
+  all 0xfffffffd + nLockTime 0                             97514   64.68%
+  all 0xffffffff + nLockTime 0  <- the library today       42358   28.09%
+  all RBF-signalling + anti-fee-sniping locktime            6414    4.25%
+
+## Output count
+    1 outputs      14964    9.93%
+    2 outputs     127257   84.41%
+    3 outputs       4277    2.84%
+    4 outputs       1114    0.74%
+    5 outputs        545    0.36%
+    6 outputs        690    0.46%
+    7 outputs        216    0.14%
+    8 outputs        167    0.11%
+    9 outputs        224    0.15%
+   10 outputs        117    0.08%
+   11 outputs        121    0.08%
+   12 outputs        142    0.09%
+   13 outputs         82    0.05%
+   14 outputs         64    0.04%
+   15 outputs         90    0.06%
+   16 outputs         57    0.04%
+   17 outputs         50    0.03%
+   18 outputs         56    0.04%
+   19 outputs         27    0.02%
+  20+ outputs        509    0.34%
+  <=2 outputs     142221   94.33%
+
+## Input count
+    1 inputs      137070   90.91%
+    2 inputs        7723    5.12%
+    3 inputs        1789    1.19%
+    4 inputs        1132    0.75%
+    5 inputs         630    0.42%
+    6 inputs         472    0.31%
+    7 inputs         286    0.19%
+    8 inputs         189    0.13%
+    9 inputs         127    0.08%
+   10 inputs         177    0.12%
+   11 inputs         109    0.07%
+   12 inputs          87    0.06%
+   13 inputs          83    0.06%
+   14 inputs          74    0.05%
+   15 inputs          44    0.03%
+   16 inputs          48    0.03%
+   17 inputs          38    0.03%
+   18 inputs          32    0.02%
+   19 inputs          16    0.01%
+  20+ inputs         643    0.43%
+
+## Transaction version
+  version 2      132893   88.14%
+  version 1       17739   11.77%
+  version 3         137    0.09%
+
+## Output script types (per output)
+  v0_p2wpkh           169237   50.84%
+  op_return           103510   31.10%
+  v1_p2tr              19040    5.72%
+  witness_other        15089    4.53%
+  p2pkh                12496    3.75%
+  p2sh                  9078    2.73%
+  v0_p2wsh              4404    1.32%
+  nonstandard              3    0.00%
+
+## Locating the library's transaction shape
+  transactions with any P2WSH output             3362    2.23%
+  Kappos template (<=2 out, 1 P2WSH)            2191    1.45%
+  2-in 3-out (any metadata)                      968    0.64%
+  2-in 3-out + locktime 0 + all final            805    0.53%
+  ...and exactly 1 P2WSH + 2 P2WPKH out            2    0.00%
+
+  ANONYMITY SET for the library's exact structural signature:
+    2 of 150769 transactions = 0.0013%
+    approx 1 in 75,384

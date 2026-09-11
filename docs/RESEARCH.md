@@ -1,3 +1,18 @@
+> **Superseded — retained for the record.**
+>
+> This document contains claims that verification did not support, including
+> "mathematically impossible", "No extra fees", and a description of an AES-256-GCM encryption layer that does not exist in the source tree. It is kept unedited so that
+> readers who saw the original can see exactly what was claimed and what replaced
+> it.
+>
+> For what is actually true, see **[research/](../research/)**, and in particular
+> [research/01-claims-corrections.md](../research/01-claims-corrections.md), which
+> lists each claim, the verification result, and the sentence that replaces it.
+>
+> Do not rely on anything below.
+
+---
+
 # Research & Rationale — lightning-payjoin-kit
 
 This document outlines the research process, technical evaluation of alternatives, and the specific rationale behind why `lightning-payjoin-kit` is the optimal approach for bringing channel funding privacy to the Lightning Network.

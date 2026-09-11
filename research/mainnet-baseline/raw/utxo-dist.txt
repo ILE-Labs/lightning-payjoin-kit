@@ -1,0 +1,88 @@
+# U2 - real value distributions and contributor eligibility
+# blocks: 31 sampled every 144 from height 966300
+
+## (a) FLOW - spendable outputs created on-chain
+  sample size          229,347
+  value quantiles (sat)
+    p1                            250
+    p5                            330
+    p10                           600
+    p25                        14,190
+    p50                        70,910
+    p75                       464,662
+    p90                     1,968,371
+    p95                    10,911,915
+    p99                   301,227,085
+  mean                     123,740,080
+
+  share able to serve as a contributor input (value > 99*feerate + 546):
+    feerate    floor(sat)      eligible        share
+        1 s/vB         645       205,800       89.73%
+        2 s/vB         744       205,062       89.41%
+        5 s/vB       1,041       204,171       89.02%
+       10 s/vB       1,536       202,871       88.46%
+       20 s/vB       2,526       201,313       87.78%
+       50 s/vB       5,496       196,835       85.82%
+      100 s/vB      10,446       188,331       82.12%
+      200 s/vB      20,346       151,611       66.11%
+      400 s/vB      40,146       133,245       58.10%
+
+## (b) SPENT - prevout values of inputs actually spent
+  sample size          22,801
+  value quantiles (sat)
+    p1                            546
+    p5                            546
+    p10                         1,000
+    p25                         9,000
+    p50                       147,795
+    p75                     1,546,560
+    p90                    18,066,300
+    p95                    73,418,852
+    p99                 1,271,456,412
+  mean                     363,124,925
+
+  share able to serve as a contributor input (value > 99*feerate + 546):
+    feerate    floor(sat)      eligible        share
+        1 s/vB         645        21,444       94.05%
+        2 s/vB         744        21,400       93.86%
+        5 s/vB       1,041        17,825       78.18%
+       10 s/vB       1,536        17,690       77.58%
+       20 s/vB       2,526        17,593       77.16%
+       50 s/vB       5,496        17,360       76.14%
+      100 s/vB      10,446        16,971       74.43%
+      200 s/vB      20,346        16,357       71.74%
+      400 s/vB      40,146        15,229       66.79%
+
+## script types of spent outputs
+  v0_p2wpkh            16349   71.70%
+  p2sh                  2124    9.32%
+  v1_p2tr               2021    8.86%
+  p2pkh                 1648    7.23%
+  v0_p2wsh               591    2.59%
+  unknown                 68    0.30%
+
+## cross-check: FLOW vs SPENT quantiles (sat)
+    quantile            FLOW           SPENT       ratio
+    p1                    250             546       2.18x
+    p5                    330             546       1.65x
+    p10                   600           1,000       1.67x
+    p25                14,190           9,000       0.63x
+    p50                70,910         147,795       2.08x
+    p75               464,662       1,546,560       3.33x
+    p90             1,968,371      18,066,300       9.18x
+    p95            10,911,915      73,418,852       6.73x
+    p99           301,227,085   1,271,456,412       4.22x
+
+## what the 99 vbytes costs a contributor, as a share of their coin
+   FLOW median coin  = 70,910 sat     SPENT median coin = 147,795 sat
+    feerate     cost(sat)    % of FLOW median   % of SPENT median
+        1 s/vB          99               0.140%              0.067%
+        2 s/vB         198               0.279%              0.134%
+        5 s/vB         495               0.698%              0.335%
+       10 s/vB         990               1.396%              0.670%
+       20 s/vB       1,980               2.792%              1.340%
+       50 s/vB       4,950               6.981%              3.349%
+      100 s/vB       9,900              13.961%              6.698%
+      200 s/vB      19,800              27.923%             13.397%
+      400 s/vB      39,600              55.845%             26.794%
+

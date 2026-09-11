@@ -1,0 +1,48 @@
+===== SEED 20260910 =====
+construction A (current)           correct  19999  wrong      0  ambiguous      1  no-answer      0  success  99.997%
+construction B (remediated)        correct     90  wrong      0  ambiguous      0  no-answer  19910  success  50.225%
+construction A (current)           correct  19944  wrong      0  ambiguous     56  no-answer      0  success  99.860%
+construction B (remediated)        correct  19939  wrong      0  ambiguous     61  no-answer      0  success  99.847%
+construction C (absorbed)          correct      0  wrong     17  ambiguous      0  no-answer  19983  success  49.957%
+construction A (current)           correct  19944  wrong      0  ambiguous      0  no-answer     56  success  99.860%
+construction B (remediated)        correct  19939  wrong      0  ambiguous      0  no-answer     61  success  99.847%
+construction C (absorbed)          correct      0  wrong     17  ambiguous      0  no-answer  19983  success  49.957%
+construction B (remediated), taproot correct      0  wrong      0  ambiguous  19939  no-answer     61  success  50.000%
+construction C (absorbed), taproot correct      0  wrong      0  ambiguous     17  no-answer  19983  success  50.000%
+construction A (current)           correct  19943  wrong     42  ambiguous     15  no-answer      0  success  99.752%
+construction B (remediated)        correct  19946  wrong     41  ambiguous     13  no-answer      0  success  99.763%
+construction C (absorbed)          correct   5592  wrong   2777  ambiguous  11631  no-answer      0  success  57.037%
+construction B (remediated), taproot correct  19841  wrong     45  ambiguous    114  no-answer      0  success  99.490%
+construction C (absorbed), taproot correct   4373  wrong   3065  ambiguous  12562  no-answer      0  success  53.270%
+===== SEED 1 =====
+construction A (current)           correct  20000  wrong      0  ambiguous      0  no-answer      0  success 100.000%
+construction B (remediated)        correct     95  wrong      0  ambiguous      0  no-answer  19905  success  50.238%
+construction A (current)           correct  19932  wrong      0  ambiguous     68  no-answer      0  success  99.830%
+construction B (remediated)        correct  19918  wrong      0  ambiguous     82  no-answer      0  success  99.795%
+construction C (absorbed)          correct      0  wrong     30  ambiguous      0  no-answer  19970  success  49.925%
+construction A (current)           correct  19932  wrong      0  ambiguous      0  no-answer     68  success  99.830%
+construction B (remediated)        correct  19918  wrong      0  ambiguous      0  no-answer     82  success  99.795%
+construction C (absorbed)          correct      0  wrong     30  ambiguous      0  no-answer  19970  success  49.925%
+construction B (remediated), taproot correct      0  wrong      0  ambiguous  19918  no-answer     82  success  50.000%
+construction C (absorbed), taproot correct      0  wrong      0  ambiguous     30  no-answer  19970  success  50.000%
+construction A (current)           correct  19935  wrong     49  ambiguous     16  no-answer      0  success  99.715%
+construction B (remediated)        correct  19938  wrong     49  ambiguous     13  no-answer      0  success  99.722%
+construction C (absorbed)          correct   5559  wrong   2824  ambiguous  11617  no-answer      0  success  56.837%
+construction B (remediated), taproot correct  19833  wrong     52  ambiguous    115  no-answer      0  success  99.453%
+construction C (absorbed), taproot correct   4382  wrong   3054  ambiguous  12564  no-answer      0  success  53.320%
+===== SEED 987654321 =====
+construction A (current)           correct  20000  wrong      0  ambiguous      0  no-answer      0  success 100.000%
+construction B (remediated)        correct    103  wrong      0  ambiguous      0  no-answer  19897  success  50.258%
+construction A (current)           correct  19916  wrong      0  ambiguous     84  no-answer      0  success  99.790%
+construction B (remediated)        correct  19915  wrong      0  ambiguous     85  no-answer      0  success  99.787%
+construction C (absorbed)          correct      0  wrong     36  ambiguous      0  no-answer  19964  success  49.910%
+construction A (current)           correct  19916  wrong      0  ambiguous      0  no-answer     84  success  99.790%
+construction B (remediated)        correct  19915  wrong      0  ambiguous      0  no-answer     85  success  99.787%
+construction C (absorbed)          correct      0  wrong     36  ambiguous      0  no-answer  19964  success  49.910%
+construction B (remediated), taproot correct      0  wrong      0  ambiguous  19915  no-answer     85  success  50.000%
+construction C (absorbed), taproot correct      0  wrong      0  ambiguous     36  no-answer  19964  success  50.000%
+construction A (current)           correct  19950  wrong     37  ambiguous     13  no-answer      0  success  99.782%
+construction B (remediated)        correct  19950  wrong     35  ambiguous     15  no-answer      0  success  99.787%
+construction C (absorbed)          correct   5528  wrong   2883  ambiguous  11589  no-answer      0  success  56.612%
+construction B (remediated), taproot correct  19846  wrong     46  ambiguous    108  no-answer      0  success  99.500%
+construction C (absorbed), taproot correct   4360  wrong   3020  ambiguous  12620  no-answer      0  success  53.350%

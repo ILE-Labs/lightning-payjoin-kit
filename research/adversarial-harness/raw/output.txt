@@ -1,0 +1,64 @@
+# environment
+rustc 1.98.1 (48a229cea 2026-09-01)
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+Linux 6.17.0-1022-azure
+# date (UTC)
+2026-09-10T14:43:21Z
+
+# adversarial partitioning harness
+# seed        = 20260910
+# samples     = 20000
+# utxo draw   = log-uniform over [20000, 50000000] sat  (ASSUMPTION, see analysis.md)
+# fee jitter  = +/-60% of the contributor's marginal cost, construction B only
+# chance      = 50.000% (two pairings, one contributor)
+
+built 20000 transaction pairs; 0 draws rejected by dust or affordability
+
+## A1 — fee-residue attack (input - change == k x feerate)
+construction A (current)           correct  19999  wrong      0  ambiguous      1  no-answer      0  success  99.997%
+construction B (remediated)        correct     90  wrong      0  ambiguous      0  no-answer  19910  success  50.225%
+
+## A2 — subset-sum partitioning
+construction A (current)           correct  19944  wrong      0  ambiguous     56  no-answer      0  success  99.860%
+construction B (remediated)        correct  19939  wrong      0  ambiguous     61  no-answer      0  success  99.847%
+construction C (absorbed)          correct      0  wrong     17  ambiguous      0  no-answer  19983  success  49.957%
+
+## A2-blind — subset-sum with the channel output NOT identified
+## (the Profile A adversary, and the adversary against a taproot channel)
+construction A (current)           correct  19944  wrong      0  ambiguous      0  no-answer     56  success  99.860%
+construction B (remediated)        correct  19939  wrong      0  ambiguous      0  no-answer     61  success  99.847%
+construction C (absorbed)          correct      0  wrong     17  ambiguous      0  no-answer  19983  success  49.957%
+
+## A2-taproot — every output recast as P2TR, so the observer truly cannot
+## tell which output is the channel (simple taproot channels, unannounced)
+construction B (remediated), taproot correct      0  wrong      0  ambiguous  19939  no-answer     61  success  50.000%
+construction C (absorbed), taproot correct      0  wrong      0  ambiguous     17  no-answer  19983  success  50.000%
+construction B (remediated), taproot     mean 1.994   none   0.30%   exactly one   0.00%   two  99.69%   three+   0.00%
+construction C (absorbed), taproot       mean 0.002   none  99.91%   exactly one   0.00%   two   0.08%   three+   0.00%
+
+## A5 — near-equality attack (no fee arithmetic used)
+construction A (current)           correct  19943  wrong     42  ambiguous     15  no-answer      0  success  99.752%
+construction B (remediated)        correct  19946  wrong     41  ambiguous     13  no-answer      0  success  99.763%
+construction C (absorbed)          correct   5592  wrong   2777  ambiguous  11631  no-answer      0  success  57.037%
+
+## A5-blind — near-equality against all-P2TR outputs, channel not identified
+construction B (remediated), taproot correct  19841  wrong     45  ambiguous    114  no-answer      0  success  99.490%
+construction C (absorbed), taproot correct   4373  wrong   3065  ambiguous  12562  no-answer      0  success  53.270%
+
+## A3 — unnecessary-input heuristic (share of sample flagged)
+construction A (current)           BlockSci-UIH2   0.00%   BlockStream-UIH2  68.33%   Gibson-UIH2 100.00%
+construction B (remediated)        BlockSci-UIH2   0.00%   BlockStream-UIH2  68.33%   Gibson-UIH2 100.00%
+
+## A4 — metadata fingerprint (share of sample)
+## mainnet reference: all-final 28.15%, nLockTime 0 95.34%, mixed sequences 0.12%
+construction A (current)           all-nSequence-final 100.00%   nLockTime==0 100.00%   funding at index 0 100.00%   mixed sequences   0.00%
+construction B (remediated)        all-nSequence-final   0.00%   nLockTime==0   0.00%   funding at index 0  33.66%   mixed sequences   0.00%
+
+## V1 gate
+pass condition, stated before running: attack success <= 55% (chance 50% + 5pt margin)
+construction A (current)     A1 FAIL   A2 FAIL   A2-blind FAIL   A5 FAIL
+construction B (remediated)  A1 PASS   A2 FAIL   A2-blind FAIL   A5 FAIL
+construction C (absorbed)    A1 n/a    A2 PASS   A2-blind PASS   A5 FAIL
+taproot outputs:             B A2-taproot PASS   B A5-blind FAIL   C A2-taproot PASS   C A5-blind PASS
+
+construction C built in 20000/20000 draws

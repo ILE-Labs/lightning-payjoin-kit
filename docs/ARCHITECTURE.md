@@ -1,3 +1,27 @@
+> **Superseded — retained for the record.**
+>
+> This document contains claims that verification did not support, including a
+> BIP-77-style async transport for "encrypted store-and-forward coordination",
+> "end-to-end encrypted Payjoin messages", authenticated encryption of directory
+> payloads, and `tokio` or async traits for directory clients. None of it exists in
+> the source tree; the library is synchronous and has no cryptography of its own. It
+> is kept unedited so that readers who saw the original can see exactly what was
+> claimed and what replaced it.
+>
+> It also describes the construction — the contributor supplies an input and
+> receives the same value back as change — that measurement has since found to be
+> partitionable by an observer with near-certainty, after every fix set out here.
+>
+> For what is actually true, see **[research/](../research/)**, and in particular
+> [research/01-claims-corrections.md](../research/01-claims-corrections.md), which
+> lists each claim, the verification result, and the sentence that replaces it, and
+> [research/02-the-central-result.md](../research/02-the-central-result.md) for the
+> measurement against this design.
+>
+> Do not rely on anything below.
+
+---
+
 # Architecture — lightning-payjoin-kit
 
 This document defines a refined architecture for building `lightning-payjoin-kit` to a credible Proof of Concept. The design is intentionally conservative: reuse existing Payjoin and Lightning protocol surfaces where possible, avoid custom cryptography, and prove the idea on regtest before claiming production readiness.

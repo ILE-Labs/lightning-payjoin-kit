@@ -7,6 +7,10 @@ the central question the project was built to answer now has an answer.
 Read `02-the-central-result.md` first. It is the one that changes what the project
 should do next.
 
+For what the project does with these results, see the verification-led roadmap at
+[`ROADMAP.md`](../ROADMAP.md). Its current phase evaluates candidate constructions
+against the harnesses here before any of them is implemented.
+
 Everything measured against real Bitcoin data is measured against real Bitcoin
 data: 150,769 mainnet transactions parsed from raw consensus bytes, and a
 collaborative funding transaction broadcast to and mined by Bitcoin Core. Where a

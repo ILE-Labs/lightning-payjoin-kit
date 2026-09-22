@@ -9,6 +9,10 @@
 > [research/01-claims-corrections.md](../research/01-claims-corrections.md), which
 > lists each claim, the verification result, and the sentence that replaces it.
 >
+> The live roadmap is **[ROADMAP.md](../ROADMAP.md)** in the repository root. It is
+> verification-led: each phase states what must be measured before the next begins,
+> and the current phase evaluates candidate constructions before any are implemented.
+>
 > Do not rely on anything below.
 
 ---

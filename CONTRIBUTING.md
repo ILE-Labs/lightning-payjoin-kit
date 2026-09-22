@@ -47,6 +47,10 @@ to understand where the project currently stands — in particular
 construction the library was built around does not deliver the privacy property
 it was intended to.
 
+[ROADMAP.md](./ROADMAP.md) states what is being worked on now and what each phase
+must measure before the next begins. The current phase evaluates candidate
+constructions and deliberately produces no library code.
+
 `docs/ARCHITECTURE.md` is retained for the record but superseded. It describes an
 async relay coordination layer and a BIP-78 adaptation, neither of which exists in
 the source tree.

@@ -1,5 +1,23 @@
 # Implementation Notes
 
+> **Current, with one clarification.** This document records what the prototype
+> actually does, and that part still holds: the collaborative construction is built,
+> signed by both input owners, carried through the Lightning funding safety boundary,
+> broadcast and mined on Bitcoin Core regtest, and accepted by real LDK channel state
+> machines. Those results are verification targets V2 and V3, and both pass.
+>
+> What it does **not** establish is that the construction delivers privacy.
+> Measurement has since found that a funding transaction in which the contributor
+> receives their value back as change can be partitioned by an observer with
+> near-certainty, and that every remediation planned for it leaves it that way. See
+> [research/02-the-central-result.md](./research/02-the-central-result.md).
+>
+> The phrases "async relay shape" and "async relay architecture" below are stale
+> framing from the earlier design. The library is synchronous and the directory is an
+> in-memory mock; the text is left unedited for the record.
+
+---
+
 This document describes what has been implemented in the current
 `lightning-payjoin-kit` proof of concept, what is working, how the funding flow
 is exercised, and how to test it locally.
